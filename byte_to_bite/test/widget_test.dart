@@ -1,30 +1,93 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 
-import 'package:byte_to_bite/main.dart';
+void main() => runApp(const DietaryApp());
 
-void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(DietaryApp());
+class DietaryApp extends StatelessWidget {
+  const DietaryApp({super.key});
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Dietary Restrictions',
+      theme: ThemeData(
+        primarySwatch: Colors.green,
+        scaffoldBackgroundColor: const Color(0xFFE0F2E0),
+      ),
+      home: const AllergySelectorScreen(),
+    );
+  }
+}
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+class AllergySelectorScreen extends StatefulWidget {
+  const AllergySelectorScreen({super.key});
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
-  });
+  @override
+  State<AllergySelectorScreen> createState() => _AllergySelectorScreenState();
+}
+
+class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
+  final Map<String, List<String>> allergyOptions = {
+    'Allergies': ['Oranges', 'Pears'],
+    'Lactose Intolerance': ['Milk', 'Cheese'],
+    'Gluten Free': ['Wheat', 'Barley'],
+  };
+
+  final Map<String, bool> selectedIngredients = {};
+
+  @override
+  void initState() {
+    super.initState();
+    for (var ingredient in allergyOptions.values.expand((i) => i)) {
+      selectedIngredients[ingredient] = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select Dietary Restrictions'),
+        backgroundColor: Colors.green[700],
+      ),
+      body: ListView(
+        children: buildAllergyTiles(),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: Colors.green[700],
+        selectedItemColor: Colors.white,
+        unselectedItemColor: Colors.white70,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> buildAllergyTiles() {
+    return allergyOptions.entries.map((entry) {
+      final category = entry.key;
+      final items = entry.value;
+
+      return Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: ExpansionTile(
+          title: Text(category),
+          children: items.map((ingredient) {
+            return CheckboxListTile(
+              title: Text(ingredient),
+              value: selectedIngredients[ingredient],
+              onChanged: (bool? value) {
+                setState(() {
+                  selectedIngredients[ingredient] = value ?? false;
+                  debugPrint('Selected: $ingredient → ${value ?? false}');
+                });
+              },
+            );
+          }).toList(),
+        ),
+      );
+    }).toList();
+  }
 }
