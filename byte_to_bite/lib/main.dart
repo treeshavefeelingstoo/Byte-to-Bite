@@ -151,12 +151,13 @@ class _DietaryAppState extends State<DietaryApp> {
         onToggleItem: _toggleGroceryItem,
         onDeleteWeek: _deleteWeek,
       ),
+      const ProfilePage(),
     ];
 
       return Theme(
       data: Theme.of(context).copyWith(
-        canvasColor: Colors.green[700], // ✅ sets nav bar background
-        primaryColor: Colors.white,     // ✅ active icon color
+        canvasColor: Colors.green[700], 
+        primaryColor: Colors.white,     
       ),
       child: Scaffold(
         body: pages[_selectedIndex],
@@ -170,6 +171,7 @@ class _DietaryAppState extends State<DietaryApp> {
             BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: 'Restrictions'),
             BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Meal Prep'),
             BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Groceries'),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
       ),
@@ -266,6 +268,39 @@ class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
           );
         }).toList(),
       ),
+    );
+  }
+}
+
+class ProfilePage extends StatelessWidget{
+  const ProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Your Profile"),
+        backgroundColor: Colors.green[700],
+      ),
+      body: Column(
+        children: <Widget>[
+          Align(
+            alignment: Alignment.topCenter,
+            child: Text(
+              "Followers: 0",
+              style: TextStyle(color: Colors.black, fontSize: 24),
+            ),
+          ),
+          Text("Your Recipes"),
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            child: ListTile(
+              title: Text("Hummus"),
+              subtitle: Text("Ingredients: Chickpeas, Tahini, Olive Oil"),
+            ),
+          ),
+        ],
+      )
     );
   }
 }
