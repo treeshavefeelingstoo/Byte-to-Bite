@@ -24,12 +24,15 @@ class GroceryPage extends StatefulWidget {
   final Function(DateTime weekStart, String item) onToggleItem;
   final Function(DateTime weekStart) onDeleteWeek;
 
+  final VoidCallback onBackToMealPrep;
+
   const GroceryPage({
     super.key,
     required this.groceriesByWeek,
     required this.checkedGroceries,
     required this.onToggleItem,
     required this.onDeleteWeek,
+    required this.onBackToMealPrep,
   });
 
   @override
@@ -54,6 +57,11 @@ class _GroceryPageState extends State<GroceryPage> {
       appBar: AppBar(
         title: const Text("Grocery List"),
         backgroundColor: const Color(0xFF5aa454),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBackToMealPrep,
+        ),
+
       ),
       body: weeks.isEmpty
           ? const Center(
@@ -549,6 +557,7 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
       appBar: AppBar(
         title: const Text("Meal Planner"),
         backgroundColor: const Color(0xFF5aa454),
+        automaticallyImplyLeading: false,
       ),
       body: Center(
         child: Container(
@@ -696,6 +705,7 @@ class RecipePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text("Pick a Recipe"),
         backgroundColor: const Color(0xFF5aa454),
+        automaticallyImplyLeading: false,
       ),
       body: ListView.builder(
         itemCount: filteredRecipes.length,

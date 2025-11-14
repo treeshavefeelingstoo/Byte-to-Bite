@@ -150,6 +150,7 @@ class _DietaryAppState extends State<DietaryApp> {
         checkedGroceries: _checkedGroceries,
         onToggleItem: _toggleGroceryItem,
         onDeleteWeek: _deleteWeek,
+        onBackToMealPrep: () => setState(() => _selectedIndex = 2),
       ),
       const ProfilePage(),
     ];
@@ -243,6 +244,7 @@ class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Select Dietary Restrictions'),
         backgroundColor: Colors.green[700],
       ),
@@ -281,6 +283,7 @@ class ProfilePage extends StatelessWidget{
       appBar: AppBar(
         title: const Text("Your Profile"),
         backgroundColor: Colors.green[700],
+        automaticallyImplyLeading: false,
       ),
       body: Column(
         children: <Widget>[
