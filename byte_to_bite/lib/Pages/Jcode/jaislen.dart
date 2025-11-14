@@ -24,12 +24,15 @@ class GroceryPage extends StatefulWidget {
   final Function(DateTime weekStart, String item) onToggleItem;
   final Function(DateTime weekStart) onDeleteWeek;
 
+  final VoidCallback onBackToMealPrep;
+
   const GroceryPage({
     super.key,
     required this.groceriesByWeek,
     required this.checkedGroceries,
     required this.onToggleItem,
     required this.onDeleteWeek,
+    required this.onBackToMealPrep,
   });
 
   @override
@@ -54,6 +57,11 @@ class _GroceryPageState extends State<GroceryPage> {
       appBar: AppBar(
         title: const Text("Grocery List"),
         backgroundColor: const Color(0xFF5aa454),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBackToMealPrep,
+        ),
+
       ),
       body: weeks.isEmpty
           ? const Center(
@@ -147,6 +155,8 @@ class MealPlannerPage extends StatefulWidget {
   final Set<String> Function(DateTime weekStart) getWeekGroceries;
 
   final Set<String> excludedIngredients;
+  final Set<Meal>? savedRecipes;
+  final void Function(Meal meal)? onToggleSaveRecipe;
 
 
   const MealPlannerPage({
@@ -155,6 +165,8 @@ class MealPlannerPage extends StatefulWidget {
     required this.onWeekGroceriesChanged,
     required this.getWeekGroceries,
     required this.excludedIngredients,
+    this.savedRecipes,
+    this.onToggleSaveRecipe,
   });
 
   @override
@@ -244,9 +256,28 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                                     style: const TextStyle(color: Colors.red)),
                             ],
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () {
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.savedRecipes != null && widget.onToggleSaveRecipe != null)
+                                IconButton(
+                                  icon: Icon(
+                                    widget.savedRecipes!.any((m) => m.name == meal.name)
+                                        ? Icons.favorite
+                                        : Icons.favorite_border,
+                                    color: widget.savedRecipes!.any((m) => m.name == meal.name)
+                                        ? Colors.red
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    widget.onToggleSaveRecipe!(meal);
+                                    Navigator.pop(context);
+                                    _showMeals(date);
+                                  },
+                                ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () {
                               setState(() {
                                 widget.mealPlan[key]?.removeAt(index);
                                 if (widget.mealPlan[key]?.isEmpty ?? false) {
@@ -257,8 +288,10 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                               _showMeals(date);
                             },
                           ),
-                        ),
-                      );
+                        ],
+                      ),
+                    ),
+                  );
                     },
                   ),
                 ),
@@ -549,6 +582,7 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
       appBar: AppBar(
         title: const Text("Meal Planner"),
         backgroundColor: const Color(0xFF5aa454),
+        automaticallyImplyLeading: false,
       ),
       body: Center(
         child: Container(
@@ -696,6 +730,7 @@ class RecipePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text("Pick a Recipe"),
         backgroundColor: const Color(0xFF5aa454),
+        automaticallyImplyLeading: false,
       ),
       body: ListView.builder(
         itemCount: filteredRecipes.length,
