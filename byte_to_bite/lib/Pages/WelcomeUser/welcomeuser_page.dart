@@ -151,7 +151,11 @@ class _WelcomeUserPageState extends State<WelcomeUserPage> {
             onPressed: () {
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const DietaryApp()),
+                MaterialPageRoute(
+                  builder: (_) => DietaryRestrictionsSetupPage(
+                    userName: widget.firstName.isNotEmpty ? widget.firstName : 'User',
+                  ),
+                ),
               );
             },
             style: ElevatedButton.styleFrom(
