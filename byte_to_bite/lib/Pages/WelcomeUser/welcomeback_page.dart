@@ -46,7 +46,7 @@ class WelcomeBackPage extends StatelessWidget {
 							width: size.width * 0.6,
 							child: ElevatedButton(
 								onPressed: () {
-								Navigator.push(
+								Navigator.pushReplacement(
 									context,
 									MaterialPageRoute(
 										builder: (context) => WelcomeUserPage(
