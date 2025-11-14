@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
 import 'package:byte_to_bite/constants.dart';
+import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
+
 
 import 'dart:io';
 import 'dart:convert';
@@ -54,6 +56,10 @@ class _DietaryAppState extends State<DietaryApp> {
   int _selectedIndex = 0;
   Set<String> excludedIngredients = {};
 
+  final Map<DateTime, List<Meal>> _mealPlan = {};
+  final Map<DateTime, Set<String>> _groceriesByWeek = {};
+  final Map<String, bool> _checkedGroceries = {};
+
   @override
   void initState() {
     super.initState();
@@ -71,53 +77,99 @@ class _DietaryAppState extends State<DietaryApp> {
     await file.writeAsString(jsonString);
   }
 
-  Future<void> _loadExclusions() async {
+  Future<void> _loadExclusions() async 
+  {
     final file = await getLocalFile();
-    if (await file.exists()) {
+    if (await file.exists()) 
+    {
       final jsonString = await file.readAsString();
       final List<dynamic> decoded = jsonDecode(jsonString);
-      setState(() {
+      setState(() 
+      {
         excludedIngredients = decoded.cast<String>().toSet();
       });
     }
   }
 
-  void _updateExclusions(Set<String> exclusions) {
-    setState(() {
-      excludedIngredients = exclusions;
-    });
-    _saveExclusions(exclusions);
-  }
+     void _toggleGroceryItem(DateTime weekStart, String item) {
+      final key = '${weekStart.millisecondsSinceEpoch}_$item';
+      setState(() {
+        _checkedGroceries[key] = !(_checkedGroceries[key] ?? false);
+      });
+    }
+
+    void _handleWeekGroceriesChanged(DateTime weekStart, Set<String> items) {
+      setState(() {
+        _groceriesByWeek[weekStart] = items;
+      });
+    }
+
+
+    void _deleteWeek(DateTime weekStart) {
+      setState(() {
+        _checkedGroceries.removeWhere((key, _) =>
+          key.startsWith('${weekStart.millisecondsSinceEpoch}_'));
+        _groceriesByWeek.remove(weekStart);
+        final weekEnd = weekStart.add(const Duration(days: 7));
+        _mealPlan.removeWhere((date, _) =>
+          date.isAfter(weekStart.subtract(const Duration(days: 1))) &&
+          date.isBefore(weekEnd));
+      });
+    }
+
+
+    void _updateExclusions(Set<String> exclusions) {
+      setState(() {
+        excludedIngredients = exclusions;
+      });
+      _saveExclusions(exclusions);
+    }
+
+    Set<String> _getWeekGroceries(DateTime weekStart) {
+      return _groceriesByWeek[weekStart] ?? <String>{};
+    }
+
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       const HomeScreen(),
-      RecipeScreen(excludedIngredients: excludedIngredients),
       AllergySelectorScreen(
         onRestrictionsChanged: _updateExclusions,
         initialSelections: excludedIngredients,
       ),
+      MealPlannerPage(
+        mealPlan: _mealPlan,
+        onWeekGroceriesChanged: _handleWeekGroceriesChanged,
+        getWeekGroceries: _getWeekGroceries,
+        excludedIngredients: excludedIngredients, 
+      ),
+
+      GroceryPage(
+        groceriesByWeek: _groceriesByWeek,
+        checkedGroceries: _checkedGroceries,
+        onToggleItem: _toggleGroceryItem,
+        onDeleteWeek: _deleteWeek,
+      ),
     ];
 
-    return MaterialApp(
-      title: 'Dietary Restrictions',
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-        scaffoldBackgroundColor: const Color(0xFFE0F2E0),
+      return Theme(
+      data: Theme.of(context).copyWith(
+        canvasColor: Colors.green[700], // ✅ sets nav bar background
+        primaryColor: Colors.white,     // ✅ active icon color
       ),
-      home: Scaffold(
+      child: Scaffold(
         body: pages[_selectedIndex],
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: (index) => setState(() => _selectedIndex = index),
-          backgroundColor: Colors.green[700],
           selectedItemColor: Colors.white,
           unselectedItemColor: Colors.white70,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
-            BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: ''),
-            BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: 'Restrictions'),
+            BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Meal Prep'),
+            BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Groceries'),
           ],
         ),
       ),
@@ -136,53 +188,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class RecipeScreen extends StatelessWidget {
-  final Set<String> excludedIngredients;
 
-  const RecipeScreen({super.key, required this.excludedIngredients});
-
-  final List<Map<String, dynamic>> allRecipes = const [
-    {
-      'name': 'Orange Smoothie',
-      'ingredients': ['Oranges', 'Milk', 'Honey'],
-    },
-    {
-      'name': 'Grilled Cheese',
-      'ingredients': ['Bread', 'Cheese', 'Butter'],
-    },
-    {
-      'name': 'Pear Salad',
-      'ingredients': ['Pears', 'Lettuce', 'Walnuts'],
-    },
-    {
-      'name': 'Veggie Stir Fry',
-      'ingredients': ['Broccoli', 'Carrots', 'Soy Sauce'],
-    },
-  ];
-
-  List<Map<String, dynamic>> get filteredRecipes {
-    return allRecipes.where((recipe) {
-      final ingredients = recipe['ingredients'] as List<String>;
-      return !ingredients.any(excludedIngredients.contains);
-    }).toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: filteredRecipes.map((recipe) {
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          child: ListTile(
-            title: Text(recipe['name']),
-            subtitle: Text('Ingredients: ${recipe['ingredients'].join(', ')}'),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
 
 class AllergySelectorScreen extends StatefulWidget {
   final void Function(Set<String>) onRestrictionsChanged;
@@ -200,9 +206,12 @@ class AllergySelectorScreen extends StatefulWidget {
 
 class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
   final Map<String, List<String>> allergyOptions = {
-    'Allergies': ['Oranges', 'Pears'],
-    'Lactose Intolerance': ['Milk', 'Cheese'],
-    'Gluten Free': ['Wheat', 'Barley'],
+    'Allergies (Veggies)': ['Bell Pepper','Basil', 'Tomato', 'Olive Oil', 'Garlic', 'Onion', 'Cilantro', 'Quinoa', 'Cucumber'],
+    'Allergies (Seeds)': ['Sesame', 'Soy Sauce'],
+    'Allergies (Fruit)': ['Avocado'],
+    'Lactose Intolerance': ['Milk', 'Feta'],
+    'Gluten Free Exlusions & Other Grains': ['Wheat', 'Barley', 'Bread', 'Tortilla', 'Rice', 'Pasta'],
+    'Vegan / Vegetarian Exclusions': ['Salmon', 'Egg', 'Beef', 'Chicken', 'Duck'],
   };
 
   late Map<String, bool> selectedIngredients;

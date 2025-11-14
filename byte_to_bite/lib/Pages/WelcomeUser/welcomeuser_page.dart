@@ -250,26 +250,6 @@ class _WelcomeUserPageState extends State<WelcomeUserPage> {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const WelcomePage()),
-            );
-          }
-          // nav bar icons that aren't home do nothing for now
-        },
-        backgroundColor: Colors.green[700],
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.white70,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
-        ],
-      ),
     );
   }
 }
