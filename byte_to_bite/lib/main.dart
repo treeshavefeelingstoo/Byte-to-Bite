@@ -59,6 +59,7 @@ class _DietaryAppState extends State<DietaryApp> {
         onRestrictionsChanged: _updateExclusions,
         initialSelections: excludedIngredients,
       ),
+      const ProfilePage(),
     ];
 
     return MaterialApp(
@@ -79,6 +80,7 @@ class _DietaryAppState extends State<DietaryApp> {
             BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
             BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: ''),
             BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: ''),
           ],
         ),
       ),
@@ -218,6 +220,39 @@ class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
           );
         }).toList(),
       ),
+    );
+  }
+}
+
+class ProfilePage extends StatelessWidget{
+  const ProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Your Profile"),
+        backgroundColor: Colors.green[700],
+      ),
+      body: Column(
+        children: <Widget>[
+          Align(
+            alignment: Alignment.topCenter,
+            child: Text(
+              "Followers: 0",
+              style: TextStyle(color: Colors.black, fontSize: 24),
+            ),
+          ),
+          Text("Your Recipes"),
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            child: ListTile(
+              title: Text("Hummus"),
+              subtitle: Text("Ingredients: Chickpeas, Tahini, Olive Oil"),
+            ),
+          ),
+        ],
+      )
     );
   }
 }
