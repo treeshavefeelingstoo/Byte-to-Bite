@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
+import 'package:byte_to_bite/main.dart';
+
 
 class WelcomeUserPage extends StatefulWidget {
   final String firstName;
@@ -141,7 +143,26 @@ class _WelcomeUserPageState extends State<WelcomeUserPage> {
       case 4:
         return _buildCheckboxPage('Foods You Don\'t Like', foodsDislike, selectedFoodsDislike);
       case 5:
-        return _buildCheckboxPage('Cooking Level', cookingLevels, selectedCookingLevel);
+      return Column(
+        children: [
+          _buildCheckboxPage('Cooking Level', cookingLevels, selectedCookingLevel),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const DietaryApp()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF479E36),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text('Finish Setup'),
+          ),
+        ],
+      );
       default:
         return SizedBox();
     }

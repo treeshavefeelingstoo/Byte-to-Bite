@@ -19,7 +19,8 @@ Widget _buildBottomNavBar(BuildContext context, int currentIndex) {
 }
 
 class WelcomePage extends StatelessWidget {
-  const WelcomePage({super.key});
+  final VoidCallback? onContinue;
+  const WelcomePage({super.key, this.onContinue});
 
   @override
   Widget build(BuildContext context) {

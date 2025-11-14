@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
 import 'package:byte_to_bite/constants.dart';
 
+import 'dart:io';
+import 'dart:convert';
+
+
 void main() => runApp (MyApp());
 
 class MyApp extends StatelessWidget {
@@ -17,15 +21,27 @@ class MyApp extends StatelessWidget {
         primaryColor: kPrimaryColor,
         scaffoldBackgroundColor: const Color(0xFFB8EEB0),
       ),
-      home: WelcomePage(),
+      home: WelcomePageWrapper(),
        );
   }
 }
 
-import 'dart:io';
-import 'dart:convert';
+class WelcomePageWrapper extends StatelessWidget {
+  const WelcomePageWrapper({super.key});
 
-void main() => runApp(const DietaryApp());
+  @override
+  Widget build(BuildContext context) {
+    return WelcomePage(
+      onContinue: () {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const DietaryApp()),
+        );
+      },
+    );
+  }
+}
+
 
 class DietaryApp extends StatefulWidget {
   const DietaryApp({super.key});
