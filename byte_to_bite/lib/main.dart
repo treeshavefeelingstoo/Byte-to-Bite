@@ -4,7 +4,6 @@ import 'package:byte_to_bite/constants.dart';
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
 import 'package:byte_to_bite/Pages/HomePage/home_page.dart';
 
-
 import 'dart:io';
 import 'dart:convert';
 
@@ -48,8 +47,14 @@ class WelcomePageWrapper extends StatelessWidget {
 
 class DietaryApp extends StatefulWidget {
   final String userName;
-  
-  const DietaryApp({super.key, required this.userName});
+  final Set<String>? initialExclusions;
+
+  const DietaryApp({
+    super.key,
+    required this.userName,
+    this.initialExclusions,
+  });
+
 
   @override
   State<DietaryApp> createState() => _DietaryAppState();
@@ -66,9 +71,15 @@ class _DietaryAppState extends State<DietaryApp> {
 
   @override
   void initState() {
-    super.initState();
-    _loadExclusions();
+  super.initState();
+  if (widget.initialExclusions != null) {
+    excludedIngredients = widget.initialExclusions!;
+    _saveExclusions(excludedIngredients); // persist them
+  } else {
+    _loadExclusions(); // fallback to file
   }
+}
+
 
   Future<File> getLocalFile() async {
     final directory = Directory.systemTemp; 
@@ -219,13 +230,17 @@ class _DietaryRestrictionsSetupPageState extends State<DietaryRestrictionsSetupP
   Set<String> selectedRestrictions = {};
 
   void _saveAndContinue() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DietaryApp(userName: widget.userName),
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (_) => DietaryApp(
+        userName: widget.userName,
+        initialExclusions: selectedRestrictions,
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {
