@@ -28,28 +28,30 @@ class _HomePageState extends State<HomePage> {
   void _generateRandomMeals() {
     // Sample meals pool
     final List<Meal> allMeals = [
-      Meal('Grilled Chicken Salad', ['chicken', 'lettuce', 'tomatoes', 'olive oil'],
+      Meal('Grilled Chicken Salad', ['Chicken', 'Lettuce', 'Tomato', 'Olive Oil'],
           color: Colors.green, icon: Icons.restaurant),
-      Meal('Pasta Primavera', ['pasta', 'bell peppers', 'zucchini', 'garlic'],
+      Meal('Pasta Primavera', ['Pasta', 'Bell Pepper', 'Zucchini', 'Garlic'],
           color: Colors.orange, icon: Icons.dinner_dining),
-      Meal('Salmon with Vegetables', ['salmon', 'broccoli', 'carrots', 'lemon'],
+      Meal('Salmon with Vegetables', ['Salmon', 'Broccoli', 'Carrots', 'Lemon'],
           color: Colors.blue, icon: Icons.set_meal),
-      Meal('Veggie Stir Fry', ['tofu', 'bok choy', 'mushrooms', 'soy sauce'],
+      Meal('Veggie Stir Fry', ['Tofu', 'Bok Choy', 'Mushrooms', 'Soy Sauce'],
           color: Colors.purple, icon: Icons.ramen_dining),
-      Meal('Turkey Sandwich', ['turkey', 'bread', 'lettuce', 'mayo'],
+      Meal('Turkey Sandwich', ['Turkey', 'Bread', 'Lettuce', 'Mayo'],
           color: Colors.brown, icon: Icons.lunch_dining),
-      Meal('Beef Tacos', ['beef', 'tortillas', 'cheese', 'salsa'],
+      Meal('Beef Tacos', ['Beef', 'Tortilla', 'Cheese', 'Salsa'],
           color: Colors.red, icon: Icons.fastfood),
-      Meal('Greek Salad', ['feta', 'olives', 'cucumber', 'tomatoes'],
+      Meal('Greek Salad', ['Feta', 'Olives', 'Cucumber', 'Tomato'],
           color: Colors.teal, icon: Icons.restaurant_menu),
-      Meal('Chicken Curry', ['chicken', 'curry powder', 'coconut milk', 'rice'],
+      Meal('Chicken Curry', ['Chicken', 'Curry Powder', 'Coconut Milk', 'Rice'],
           color: Colors.amber, icon: Icons.ramen_dining),
     ];
 
     // Filter out meals with excluded ingredients
+    final exclusions = widget.excludedIngredients?.map((e) => e.toLowerCase()).toSet() ?? {};
+
     final availableMeals = allMeals.where((meal) {
       return !meal.ingredients.any((ingredient) =>
-          widget.excludedIngredients?.contains(ingredient.toLowerCase()) ?? false);
+        exclusions.contains(ingredient.toLowerCase()));
     }).toList();
 
     if (availableMeals.isEmpty) {
