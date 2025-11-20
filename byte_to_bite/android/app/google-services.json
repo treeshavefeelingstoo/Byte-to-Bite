@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "110274988062",
+    "project_id": "bytetobitedb",
+    "storage_bucket": "bytetobitedb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:110274988062:android:0f27bafec1de5624ce060f",
+        "android_client_info": {
+          "package_name": "com.example.byte_to_bite"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB49Wmh8WMKK286r0_8X016tKgkfyMyxgs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

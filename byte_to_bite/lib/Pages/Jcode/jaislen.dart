@@ -155,6 +155,8 @@ class MealPlannerPage extends StatefulWidget {
   final Set<String> Function(DateTime weekStart) getWeekGroceries;
 
   final Set<String> excludedIngredients;
+  final Set<Meal>? savedRecipes;
+  final void Function(Meal meal)? onToggleSaveRecipe;
 
 
   const MealPlannerPage({
@@ -163,6 +165,8 @@ class MealPlannerPage extends StatefulWidget {
     required this.onWeekGroceriesChanged,
     required this.getWeekGroceries,
     required this.excludedIngredients,
+    this.savedRecipes,
+    this.onToggleSaveRecipe,
   });
 
   @override
@@ -252,9 +256,28 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                                     style: const TextStyle(color: Colors.red)),
                             ],
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () {
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.savedRecipes != null && widget.onToggleSaveRecipe != null)
+                                IconButton(
+                                  icon: Icon(
+                                    widget.savedRecipes!.any((m) => m.name == meal.name)
+                                        ? Icons.favorite
+                                        : Icons.favorite_border,
+                                    color: widget.savedRecipes!.any((m) => m.name == meal.name)
+                                        ? Colors.red
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () {
+                                    widget.onToggleSaveRecipe!(meal);
+                                    Navigator.pop(context);
+                                    _showMeals(date);
+                                  },
+                                ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () {
                               setState(() {
                                 widget.mealPlan[key]?.removeAt(index);
                                 if (widget.mealPlan[key]?.isEmpty ?? false) {
@@ -265,8 +288,10 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                               _showMeals(date);
                             },
                           ),
-                        ),
-                      );
+                        ],
+                      ),
+                    ),
+                  );
                     },
                   ),
                 ),
