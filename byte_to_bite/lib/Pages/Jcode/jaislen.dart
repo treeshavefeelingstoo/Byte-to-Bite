@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 
-
-
 class Meal {
   final String name;
   final List<String> ingredients;
   final List<String> restrictions;
   final Color color;
   final IconData icon;
+  final String mealType;
 
   Meal(
     this.name,
@@ -15,6 +14,7 @@ class Meal {
     this.restrictions = const [],
     this.color = Colors.blue,
     this.icon = Icons.restaurant,
+    this.mealType = "lunch",
   });
 }
 
@@ -23,7 +23,6 @@ class GroceryPage extends StatefulWidget {
   final Map<String, bool> checkedGroceries;
   final Function(DateTime weekStart, String item) onToggleItem;
   final Function(DateTime weekStart) onDeleteWeek;
-
   final VoidCallback onBackToMealPrep;
 
   const GroceryPage({
@@ -46,12 +45,10 @@ class _GroceryPageState extends State<GroceryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final weeks = widget.groceriesByWeek.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
-    
+    final weeks = widget.groceriesByWeek.keys.toList()..sort((a, b) => b.compareTo(a));
     final now = DateTime.now();
-    final currentWeekStart = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: now.weekday % 7));
+    final currentWeekStart =
+        DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday % 7));
 
     return Scaffold(
       appBar: AppBar(
@@ -61,18 +58,16 @@ class _GroceryPageState extends State<GroceryPage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: widget.onBackToMealPrep,
         ),
-
       ),
       body: weeks.isEmpty
-          ? const Center(
-              child: Text("No groceries yet. Add meals to populate weekly lists."))
+          ? const Center(child: Text("No groceries yet. Add meals to populate weekly lists."))
           : ListView.builder(
               itemCount: weeks.length,
               itemBuilder: (context, index) {
                 final weekStart = weeks[index];
                 final items = widget.groceriesByWeek[weekStart]!.toList()..sort();
                 final isCurrentWeek = weekStart.isAtSameMomentAs(currentWeekStart);
-                
+
                 final checkedCount = items.where((item) {
                   final key = _getItemKey(weekStart, item);
                   return widget.checkedGroceries[key] ?? false;
@@ -95,8 +90,7 @@ class _GroceryPageState extends State<GroceryPage> {
                           builder: (context) => AlertDialog(
                             title: const Text("Delete Week"),
                             content: Text(
-                              "Are you sure you want to delete the grocery list and all meals for the week of ${weekStart.month}/${weekStart.day}/${weekStart.year}?"
-                            ),
+                                "Delete all groceries and meals for the week of ${weekStart.month}/${weekStart.day}/${weekStart.year}?"),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context),
@@ -108,32 +102,31 @@ class _GroceryPageState extends State<GroceryPage> {
                                   Navigator.pop(context);
                                   setState(() {});
                                 },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                                 child: const Text("Delete", style: TextStyle(color: Colors.white)),
                               ),
                             ],
                           ),
                         );
                       },
-                      tooltip: "Delete this week",
                     ),
                     children: [
                       for (final item in items)
                         CheckboxListTile(
                           value: widget.checkedGroceries[_getItemKey(weekStart, item)] ?? false,
-                          onChanged: (bool? value) {
+                          onChanged: (bool? _) {
                             widget.onToggleItem(weekStart, item);
                             setState(() {});
                           },
                           title: Text(
                             item,
                             style: TextStyle(
-                              decoration: (widget.checkedGroceries[_getItemKey(weekStart, item)] ?? false)
+                              decoration: (widget.checkedGroceries[_getItemKey(weekStart, item)] ??
+                                      false)
                                   ? TextDecoration.lineThrough
                                   : null,
-                              color: (widget.checkedGroceries[_getItemKey(weekStart, item)] ?? false)
+                              color: (widget.checkedGroceries[_getItemKey(weekStart, item)] ??
+                                      false)
                                   ? Colors.grey
                                   : Colors.black,
                             ),
@@ -158,7 +151,6 @@ class MealPlannerPage extends StatefulWidget {
   final Set<Meal>? savedRecipes;
   final void Function(Meal meal)? onToggleSaveRecipe;
 
-
   const MealPlannerPage({
     super.key,
     required this.mealPlan,
@@ -178,12 +170,9 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
   bool _isMonthView = true;
   DateTime _selectedDate = DateTime.now();
 
-  DateTime _normalize(DateTime d) => DateTime(d.year, d.month, d.day);
-  DateTime _weekStart(DateTime d) {
-    final normalized = _normalize(d);
-    final delta = normalized.weekday % 7;
-    return normalized.subtract(Duration(days: delta));
-  }
+  DateTime _normalize(DateTime date) => DateTime(date.year, date.month, date.day);
+  DateTime _weekStart(DateTime d) =>
+      _normalize(d).subtract(Duration(days: _normalize(d).weekday % 7));
 
   void _next() {
     setState(() {
@@ -205,154 +194,136 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
     });
   }
 
-  Future<void> _addMeal(DateTime date) async {
+  Future<void> _pickMealType(DateTime date) async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: const Text("Select Meal Type"),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, "breakfast"),
+            child: const Text("Breakfast"),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, "lunch"),
+            child: const Text("Lunch"),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, "dinner"),
+            child: const Text("Dinner"),
+          ),
+        ],
+      ),
+    );
+
+    if (selected != null) _addMeal(date, selected);
+  }
+
+  Future<void> _addMeal(DateTime date, String mealType) async {
     final meal = await Navigator.push(
       context,
       MaterialPageRoute(
-    builder: (context) => RecipePage(excludedIngredients: widget.excludedIngredients),
+        builder: (_) => RecipePage(excludedIngredients: widget.excludedIngredients),
       ),
     );
+
     if (meal != null && meal is Meal) {
       final key = _normalize(date);
+
+      final updated = Meal(
+        meal.name,
+        meal.ingredients,
+        restrictions: meal.restrictions,
+        color: meal.color,
+        icon: meal.icon,
+        mealType: mealType,
+      );
+
       setState(() {
-        widget.mealPlan.putIfAbsent(key, () => []).add(meal);
+        widget.mealPlan.putIfAbsent(key, () => []);
+        widget.mealPlan[key]!.add(updated);
       });
+
       final week = _weekStart(key);
-      final currentItems = widget.getWeekGroceries(week);
-      final updated = <String>{...currentItems, ...meal.ingredients};
-      widget.onWeekGroceriesChanged(week, updated);
+      final existing = widget.getWeekGroceries(week);
+      final updatedGroceries = <String>{...existing, ...meal.ingredients};
+      widget.onWeekGroceriesChanged(week, updatedGroceries);
     }
   }
 
   void _showMeals(DateTime date) {
     final key = _normalize(date);
     final meals = widget.mealPlan[key] ?? [];
+
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("Meals for ${date.month}/${date.day}/${date.year}"),
-          content: meals.isEmpty
-              ? const Text("No meals added yet.")
-              : SizedBox(
-                  width: 360,
-                  height: 320,
-                  child: ListView.builder(
-                    itemCount: meals.length,
-                    itemBuilder: (context, index) {
-                      final meal = meals[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        color: meal.color.withOpacity(0.1),
-                        child: ListTile(
-                          leading: Icon(meal.icon, color: meal.color),
-                          title: Text(meal.name, style: TextStyle(color: meal.color, fontWeight: FontWeight.bold)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("Ingredients: ${meal.ingredients.join(", ")}"),
-                              if (meal.restrictions.isNotEmpty)
-                                Text("Restrictions: ${meal.restrictions.join(", ")}",
-                                    style: const TextStyle(color: Colors.red)),
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (widget.savedRecipes != null && widget.onToggleSaveRecipe != null)
-                                IconButton(
-                                  icon: Icon(
-                                    widget.savedRecipes!.any((m) => m.name == meal.name)
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
-                                    color: widget.savedRecipes!.any((m) => m.name == meal.name)
-                                        ? Colors.red
-                                        : Colors.grey,
-                                  ),
-                                  onPressed: () {
-                                    widget.onToggleSaveRecipe!(meal);
-                                    Navigator.pop(context);
-                                    _showMeals(date);
-                                  },
-                                ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () {
-                              setState(() {
-                                widget.mealPlan[key]?.removeAt(index);
-                                if (widget.mealPlan[key]?.isEmpty ?? false) {
-                                  widget.mealPlan.remove(key);
-                                }
-                              });
-                              Navigator.pop(context);
-                              _showMeals(date);
-                            },
-                          ),
-                        ],
+      builder: (_) => AlertDialog(
+        title: Text("Meals for ${date.month}/${date.day}/${date.year}"),
+        content: SizedBox(
+          width: 360,
+          height: 320,
+          child: meals.isEmpty
+              ? const Center(child: Text("No meals yet"))
+              : ListView.builder(
+                  itemCount: meals.length,
+                  itemBuilder: (context, index) {
+                    final meal = meals[index];
+                    return Card(
+                      child: ListTile(
+                        leading: Icon(meal.icon, color: meal.color),
+                        title: Text("${meal.mealType.toUpperCase()} • ${meal.name}"),
+                        subtitle: Text("Ingredients: ${meal.ingredients.join(", ")}"),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () {
+                            setState(() {
+                              widget.mealPlan[key]?.removeAt(index);
+                              if (widget.mealPlan[key]?.isEmpty ?? false) {
+                                widget.mealPlan.remove(key);
+                              }
+                            });
+                            Navigator.pop(context);
+                            _showMeals(date);
+                          },
+                        ),
                       ),
-                    ),
-                  );
-                    },
-                  ),
+                    );
+                  },
                 ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _addMeal(date);
-              },
-              child: const Text("Add Meal"),
-            ),
-          ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickMealType(date);
+            },
+            child: const Text("Add Meal"),
+          ),
+        ],
+      ),
     );
-  }
-
-  Future<void> _pickYear() async {
-    final picked = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        return SimpleDialog(
-          title: const Text('Select Year'),
-          children: List.generate(10, (i) {
-            final year = DateTime.now().year - 5 + i;
-            return SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, year),
-              child: Text(year.toString()),
-            );
-          }),
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() {
-        _currentMonth = DateTime(picked, _currentMonth.month, 1);
-      });
-    }
   }
 
   Widget _buildMonthGrid() {
     final firstDay = DateTime(_currentMonth.year, _currentMonth.month, 1);
     final lastDay = DateTime(_currentMonth.year, _currentMonth.month + 1, 0);
-    final startOffset = firstDay.weekday % 7;
+
+    final offset = firstDay.weekday % 7;
     final totalDays = lastDay.day;
-    final totalCells = ((startOffset + totalDays) / 7).ceil() * 7;
+    final totalCells = ((offset + totalDays) / 7).ceil() * 7;
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 7,
-        childAspectRatio: 1,
       ),
       itemCount: totalCells,
       itemBuilder: (context, index) {
-        if (index < startOffset || index >= startOffset + totalDays) {
-          return const SizedBox();
-        }
-        final day = index - startOffset + 1;
+        if (index < offset || index >= offset + totalDays) return const SizedBox();
+
+        final day = index - offset + 1;
         final date = DateTime(_currentMonth.year, _currentMonth.month, day);
         final meals = widget.mealPlan[_normalize(date)] ?? [];
 
@@ -362,42 +333,17 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
             margin: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               color: meals.isEmpty ? Colors.grey[200] : Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey[400]!),
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(6),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  day.toString(),
-                  style: TextStyle(
-                    fontWeight: meals.isNotEmpty ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-                if (meals.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 2,
-                    runSpacing: 2,
-                    alignment: WrapAlignment.center,
-                    children: meals.take(3).map((meal) {
-                      return Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: meal.color,
-                          shape: BoxShape.circle,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  if (meals.length > 3)
-                    Text(
-                      '+${meals.length - 3}',
-                      style: const TextStyle(fontSize: 8),
-                    ),
+            child: Center(
+              child: Column(
+                children: [
+                  Text(day.toString()),
+                  if (meals.isNotEmpty)
+                    Text("${meals.length} meals", style: const TextStyle(fontSize: 10)),
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -407,11 +353,12 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
 
   Widget _buildWeekRow() {
     final week = _weekStart(_selectedDate);
+
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: List.generate(7, (i) {
         final date = week.add(Duration(days: i));
         final meals = widget.mealPlan[_normalize(date)] ?? [];
+
         return Expanded(
           child: GestureDetector(
             onTap: () => _showMeals(date),
@@ -420,31 +367,14 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
               height: 80,
               decoration: BoxDecoration(
                 color: meals.isEmpty ? Colors.grey[200] : Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[400]!),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey),
               ),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    date.day.toString(),
-                    style: TextStyle(
-                      fontWeight: meals.isNotEmpty ? FontWeight.bold : FontWeight.normal,
-                      fontSize: 16,
-                    ),
-                  ),
-                  if (meals.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    ...meals.take(2).map((meal) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 1),
-                          child: Icon(meal.icon, size: 16, color: meal.color),
-                        )),
-                    if (meals.length > 2)
-                      Text(
-                        '+${meals.length - 2}',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                  ],
+                  Text("${date.day}"),
+                  if (meals.isNotEmpty)
+                    Text("${meals.length} meals", style: const TextStyle(fontSize: 10)),
                 ],
               ),
             ),
@@ -454,129 +384,76 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
     );
   }
 
-  Widget _buildWeekGroceries() {
+  Widget _buildWeekMeals() {
     final week = _weekStart(_selectedDate);
-    
-    final Map<String, List<String>> groceriesByMeal = {};
-    
+
+    final Map<String, List<Meal>> grouped = {
+      "breakfast": [],
+      "lunch": [],
+      "dinner": [],
+    };
+
     for (int i = 0; i < 7; i++) {
       final date = week.add(Duration(days: i));
       final meals = widget.mealPlan[_normalize(date)] ?? [];
-      for (final meal in meals) {
-        groceriesByMeal.putIfAbsent(meal.name, () => []);
-        for (final ingredient in meal.ingredients) {
-          if (!groceriesByMeal[meal.name]!.contains(ingredient)) {
-            groceriesByMeal[meal.name]!.add(ingredient);
-          }
-        }
+      for (final m in meals) {
+        grouped[m.mealType]?.add(m);
       }
     }
 
-    if (groceriesByMeal.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey[300]!),
-        ),
-        child: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Grocery List for This Week",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            SizedBox(height: 8),
-            Text("No groceries yet. Add meals to generate list."),
-          ],
-        ),
-      );
-    }
+    final total = grouped.values.fold<int>(0, (sum, list) => sum + list.length);
+    if (total == 0) return const Text("No meals this week.");
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Grocery List by Meal",
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (grouped["breakfast"]!.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text("Breakfast", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ),
-          const SizedBox(height: 12),
-          ...groceriesByMeal.entries.map((entry) {
-            Meal? mealObj;
-            for (final meals in widget.mealPlan.values) {
-              for (final m in meals) {
-                if (m.name == entry.key) {
-                  mealObj = m;
-                  break;
-                }
-              }
-              if (mealObj != null) break;
-            }
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: mealObj?.color.withOpacity(0.1) ?? Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: mealObj?.color ?? Colors.grey),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(mealObj?.icon ?? Icons.restaurant, 
-                           size: 20, 
-                           color: mealObj?.color ?? Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        entry.key,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: mealObj?.color ?? Colors.black,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ...entry.value.map((ingredient) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 28),
-                            const Icon(Icons.check_box_outline_blank, size: 16),
-                            const SizedBox(width: 8),
-                            Text(ingredient, style: const TextStyle(fontSize: 13)),
-                          ],
-                        ),
-                      )),
-                ],
-              ),
-            );
-          }),
+          ...grouped["breakfast"]!.map(
+            (m) => Text("• ${m.name}  (${m.ingredients.join(", ")})"),
+          ),
         ],
-      ),
+        if (grouped["lunch"]!.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text("Lunch", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          ...grouped["lunch"]!.map(
+            (m) => Text("• ${m.name}  (${m.ingredients.join(", ")})"),
+          ),
+        ],
+        if (grouped["dinner"]!.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text("Dinner", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          ...grouped["dinner"]!.map(
+            (m) => Text("• ${m.name}  (${m.ingredients.join(", ")})"),
+          ),
+        ],
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    const monthNames = [
-      "January","February","March","April","May","June",
-      "July","August","September","October","November","December"
+    final monthNames = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
     ];
-    final monthName = monthNames[_currentMonth.month - 1];
-    final weekLabelStart = _weekStart(_selectedDate);
 
     return Scaffold(
       appBar: AppBar(
@@ -588,86 +465,44 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
         child: Container(
           width: 480,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
+          color: Colors.white,
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(icon: const Icon(Icons.arrow_back), onPressed: _previous),
+                  Text(
+                    _isMonthView
+                        ? "${monthNames[_currentMonth.month - 1]} ${_currentMonth.year}"
+                        : "Week of ${_weekStart(_selectedDate).month}/${_weekStart(_selectedDate).day}",
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(icon: const Icon(Icons.arrow_forward), onPressed: _next),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text("Month"),
+                    selected: _isMonthView,
+                    onSelected: (_) => setState(() => _isMonthView = true),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text("Week"),
+                    selected: !_isMonthView,
+                    onSelected: (_) => setState(() => _isMonthView = false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _isMonthView ? _buildMonthGrid() : _buildWeekRow(),
+              const SizedBox(height: 16),
+              if (!_isMonthView) _buildWeekMeals(),
             ],
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(icon: const Icon(Icons.arrow_back), onPressed: _previous),
-                    Column(
-                      children: [
-                        Text(
-                          _isMonthView
-                              ? "$monthName ${_currentMonth.year}"
-                              : "Week of ${weekLabelStart.month}/${weekLabelStart.day}/${weekLabelStart.year}",
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        if (_isMonthView)
-                          InkWell(
-                            onTap: _pickYear,
-                            child: const Text(
-                              "Change year",
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.blue,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    IconButton(icon: const Icon(Icons.arrow_forward), onPressed: _next),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ChoiceChip(
-                      label: const Text("Month"),
-                      selected: _isMonthView,
-                      onSelected: (_) => setState(() => _isMonthView = true),
-                    ),
-                    const SizedBox(width: 8),
-                    ChoiceChip(
-                      label: const Text("Week"),
-                      selected: !_isMonthView,
-                      onSelected: (_) => setState(() => _isMonthView = false),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: const [
-                    Text("Sun", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                    Text("Mon", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                    Text("Tue", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                    Text("Wed", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                    Text("Thu", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                    Text("Fri", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                    Text("Sat", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _isMonthView ? _buildMonthGrid() : _buildWeekRow(),
-                const SizedBox(height: 12),
-                if (!_isMonthView) _buildWeekGroceries(),
-              ],
-            ),
           ),
         ),
       ),
@@ -676,14 +511,13 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
 }
 
 class RecipePage extends StatelessWidget {
-  const RecipePage({super.key, required this.excludedIngredients});
-
   final Set<String> excludedIngredients;
 
+  const RecipePage({super.key, required this.excludedIngredients});
 
   @override
   Widget build(BuildContext context) {
-    final sampleRecipes = <Meal>[
+    final sampleRecipes = [
       Meal(
         "Chicken Stir Fry",
         ["Chicken", "Bell Pepper", "Soy Sauce", "Garlic"],
@@ -721,49 +555,26 @@ class RecipePage extends StatelessWidget {
       ),
     ];
 
-    final filteredRecipes = sampleRecipes.where((meal) {
-      return !meal.ingredients.any(excludedIngredients.contains);
-    }).toList();
-
+    final available = sampleRecipes.where(
+      (m) => !m.ingredients.any(excludedIngredients.contains),
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Pick a Recipe"),
         backgroundColor: const Color(0xFF5aa454),
-        automaticallyImplyLeading: false,
       ),
-      body: ListView.builder(
-        itemCount: filteredRecipes.length,
-        itemBuilder: (context, index) {
-          final meal = filteredRecipes[index];
+      body: ListView(
+        children: available.map((meal) {
           return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: ListTile(
-              leading: Icon(meal.icon, color: meal.color, size: 32),
-              title: Text(
-                meal.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Ingredients: ${meal.ingredients.join(", ")}"),
-                  if (meal.restrictions.isNotEmpty)
-                    Text(
-                      "Restrictions: ${meal.restrictions.join(", ")}",
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                ],
-              ),
-              isThreeLine: true,
-              onTap: () {
-                Navigator.pop(context, meal);
-              },
+              leading: Icon(meal.icon, color: meal.color),
+              title: Text(meal.name),
+              subtitle: Text("Ingredients: ${meal.ingredients.join(", ")}"),
+              onTap: () => Navigator.pop(context, meal),
             ),
           );
-        },
+        }).toList(),
       ),
     );
   }
