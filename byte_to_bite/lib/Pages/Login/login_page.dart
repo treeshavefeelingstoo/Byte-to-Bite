@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
 import 'package:byte_to_bite/Pages/Signup/signup_page.dart';
-import 'package:byte_to_bite/Pages/WelcomeUser/welcomeback_page.dart';
+import 'package:byte_to_bite/main.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -122,10 +122,17 @@ class _LoginPageState extends State<LoginPage> {
                           return;
                         }
 
+                        final username = email.contains('@') 
+                            ? email.split('@').first 
+                            : (email.isNotEmpty ? email : 'User');
+
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => WelcomeBackPage(email: email),
+                            builder: (context) => DietaryApp(
+                              userName: username,
+                              initialIndex: 1, 
+                            ),
                           ),
                         );
                       },
