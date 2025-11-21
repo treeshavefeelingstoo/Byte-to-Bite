@@ -1,15 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
-import 'package:byte_to_bite/constants.dart';
-import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
-import 'package:byte_to_bite/Pages/HomePage/home_page.dart';
-
 import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
+import 'package:byte_to_bite/constants.dart';
+import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
+import 'package:byte_to_bite/Pages/HomePage/home_page.dart';
+import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
 
 
 Future<void> main() async {
@@ -64,11 +63,13 @@ class WelcomePageWrapper extends StatelessWidget {
 class DietaryApp extends StatefulWidget {
   final String userName;
   final Set<String>? initialExclusions;
+  final int? initialIndex;
 
   const DietaryApp({
     super.key,
     required this.userName,
     this.initialExclusions,
+    this.initialIndex,
   });
 
 
@@ -83,16 +84,19 @@ class _DietaryAppState extends State<DietaryApp> {
   final Map<DateTime, List<Meal>> _mealPlan = {};
   final Map<DateTime, Set<String>> _groceriesByWeek = {};
   final Map<String, bool> _checkedGroceries = {};
-  final Set<Meal> _savedRecipes = {}; 
+  final Set<Meal> _savedRecipes = {}; // From meal planner
+  final Set<Map<String, dynamic>> _favoriteRecipes = {}; // Heart icon from recipe feed
+  final Set<Map<String, dynamic>> _bookmarkedRecipes = {}; // Save icon from recipe feed
 
   @override
   void initState() {
   super.initState();
+  _selectedIndex = widget.initialIndex ?? 0;
   if (widget.initialExclusions != null) {
     excludedIngredients = widget.initialExclusions!;
-    _saveExclusions(excludedIngredients); // persist them
+    _saveExclusions(excludedIngredients); 
   } else {
-    _loadExclusions(); // fallback to file
+    _loadExclusions(); 
   }
 }
 
@@ -168,8 +172,80 @@ class _DietaryAppState extends State<DietaryApp> {
         );
         if (_savedRecipes.contains(existingMeal)) {
           _savedRecipes.remove(existingMeal);
+          _favoriteRecipes.removeWhere((r) => r['name'] == meal.name);
         } else {
           _savedRecipes.add(meal);
+          // add to favorites 
+          _addMealToFavorites(meal);
+        }
+      });
+    }
+
+    void _addMealToFavorites(Meal meal) {
+      // Map meal colors to image URLs 
+      final Map<Color, String> colorToImage = {
+        Colors.green: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400',
+        Colors.orange: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
+        Colors.blue: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=400',
+        Colors.purple: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?w=400',
+        Colors.brown: 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=400',
+        Colors.red: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400',
+        Colors.teal: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400',
+        Colors.amber: 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=400',
+      };
+
+      final Map<String, dynamic> mealMap = {
+        'name': meal.name,
+        'imageUrl': colorToImage[meal.color] ?? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
+        'hashtags': meal.restrictions.map((r) => '#${r.toLowerCase().replaceAll(' ', '')}').toList(),
+        'author': 'Meal Planner',
+      };
+
+      _favoriteRecipes.add(mealMap);
+    }
+
+    void _toggleFavoriteRecipe(dynamic recipe) {
+      setState(() {
+        final Map<String, dynamic> recipeMap = {
+          'name': recipe.name,
+          'imageUrl': recipe.imageUrl,
+          'hashtags': recipe.hashtags,
+          'author': recipe.author,
+        };
+        
+        // Check if recipe already exists in favorites
+        final existingRecipe = _favoriteRecipes.firstWhere(
+          (r) => r['name'] == recipeMap['name'],
+          orElse: () => {},
+        );
+        
+        if (existingRecipe.isNotEmpty) {
+          _favoriteRecipes.remove(existingRecipe);
+        } else {
+          _favoriteRecipes.add(recipeMap);
+        }
+      });
+    }
+
+    void _toggleBookmarkRecipe(dynamic recipe) {
+      setState(() {
+        final Map<String, dynamic> recipeMap = {
+          'name': recipe.name,
+          'imageUrl': recipe.imageUrl,
+          'hashtags': recipe.hashtags,
+          'author': recipe.author,
+        };
+        
+        // Check if recipe already exists in bookmarked
+        final existingRecipe = _bookmarkedRecipes.firstWhere(
+          (r) => r['name'] == recipeMap['name'],
+          orElse: () => {},
+        );
+        
+        if (existingRecipe.isNotEmpty) {
+          _bookmarkedRecipes.remove(existingRecipe);
+        } else {
+          _bookmarkedRecipes.add(recipeMap);
         }
       });
     }
@@ -184,6 +260,13 @@ class _DietaryAppState extends State<DietaryApp> {
         getWeekGroceries: _getWeekGroceries,
         excludedIngredients: excludedIngredients,
         userName: widget.userName,
+      ),
+      RecipeFeedPage(
+        userName: widget.userName,
+        onToggleFavorite: _toggleFavoriteRecipe,
+        onToggleBookmark: _toggleBookmarkRecipe,
+        favoriteRecipeNames: _favoriteRecipes.map((r) => r['name'] as String).toSet(),
+        bookmarkedRecipeNames: _bookmarkedRecipes.map((r) => r['name'] as String).toSet(),
       ),
       AllergySelectorScreen(
         onRestrictionsChanged: _updateExclusions,
@@ -203,9 +286,14 @@ class _DietaryAppState extends State<DietaryApp> {
         checkedGroceries: _checkedGroceries,
         onToggleItem: _toggleGroceryItem,
         onDeleteWeek: _deleteWeek,
-        onBackToMealPrep: () => setState(() => _selectedIndex = 2),
+        onBackToMealPrep: () => setState(() => _selectedIndex = 3),
       ),
-      ProfilePage(userName: widget.userName, savedRecipes: _savedRecipes),
+      ProfilePage(
+        userName: widget.userName, 
+        savedRecipes: _savedRecipes,
+        favoriteRecipes: _favoriteRecipes,
+        bookmarkedRecipes: _bookmarkedRecipes,
+      ),
     ];
 
       return Theme(
@@ -220,8 +308,10 @@ class _DietaryAppState extends State<DietaryApp> {
           onTap: (index) => setState(() => _selectedIndex = index),
           selectedItemColor: Colors.white,
           unselectedItemColor: Colors.white70,
+          type: BottomNavigationBarType.fixed,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.restaurant_menu), label: 'Recipes'),
             BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: 'Restrictions'),
             BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Meal Prep'),
             BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Groceries'),
@@ -360,11 +450,62 @@ class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
   }
 }
 
-class ProfilePage extends StatelessWidget{
+class ProfilePage extends StatefulWidget {
   final String userName;
   final Set<Meal> savedRecipes;
+  final Set<Map<String, dynamic>> favoriteRecipes;
+  final Set<Map<String, dynamic>> bookmarkedRecipes;
   
-  const ProfilePage({super.key, this.userName = 'User', required this.savedRecipes});
+  const ProfilePage({
+    super.key, 
+    this.userName = 'User', 
+    required this.savedRecipes,
+    required this.favoriteRecipes,
+    required this.bookmarkedRecipes,
+  });
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  // Sample user's posted recipes implement later with database 
+  final List<Map<String, dynamic>> _postedRecipes = [
+    {
+      'name': 'Salmon Dish',
+      'imageUrl': 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=400',
+      'hashtags': ['#omega3', '#paleo'],
+    },
+    {
+      'name': 'Green Smoothie',
+      'imageUrl': 'https://images.unsplash.com/photo-1590301157890-4810ed352733?w=400',
+      'hashtags': ['#vegan', '#breakfast'],
+    },
+    {
+      'name': 'Pasta Bowl',
+      'imageUrl': 'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400',
+      'hashtags': ['#italian', '#vegetarian'],
+    },
+    {
+      'name': 'Avocado Toast',
+      'imageUrl': 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=400',
+      'hashtags': ['#healthy', '#vegetarian'],
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   void _showSignOutDialog(BuildContext context) {
     showDialog(
@@ -408,6 +549,13 @@ class ProfilePage extends StatelessWidget{
         title: const Text("Your Profile"),
         backgroundColor: Colors.green[700],
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: () => _showSettingsMenu(context),
+            tooltip: 'Settings',
+          ),
+        ],
       ),
       body: Column(
         children: <Widget>[
@@ -459,129 +607,279 @@ class ProfilePage extends StatelessWidget{
           const SizedBox(height: 15),
           // User Name
           Text(
-            userName,
+            widget.userName,
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
           ),
-          const SizedBox(height: 25),
-          // Followers and Following Buttons
+          const SizedBox(height: 10),
+          // Stats Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              OutlinedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Followers list coming soon!')),
-                  );
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF5aa454), width: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                ),
-                child: const Text(
-                  'Followers: 0',
-                  style: TextStyle(
-                    color: Color(0xFF5aa454),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 15),
-              OutlinedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Following list coming soon!')),
-                  );
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF5aa454), width: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                ),
-                child: const Text(
-                  'Following: 0',
-                  style: TextStyle(
-                    color: Color(0xFF5aa454),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              _buildStatColumn('Posts', '${_postedRecipes.length}'),
+              _buildStatColumn('Followers', '0'),
+              _buildStatColumn('Following', '0'),
             ],
           ),
           const SizedBox(height: 20),
-          // Saved Recipes and Your Recipes buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // TabBar for Posts, Saved and Favorites
+          TabBar(
+            controller: _tabController,
+            labelColor: const Color(0xFF5aa454),
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: const Color(0xFF5aa454),
+            tabs: const [
+              Tab(icon: Icon(Icons.grid_on), text: 'Posts'),
+              Tab(icon: Icon(Icons.bookmark), text: 'Saved'),
+              Tab(icon: Icon(Icons.favorite), text: 'Favorites'),
+            ],
+          ),
+          // TabBar with grid of recipes
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildRecipeGrid(_postedRecipes),
+                _buildRecipeGrid(widget.bookmarkedRecipes.toList()),
+                _buildRecipeGrid(widget.favoriteRecipes.toList()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSettingsMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SavedRecipesPage(savedRecipes: savedRecipes),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5aa454),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-                icon: const Icon(Icons.favorite),
-                label: const Text(
-                  'Saved Recipes',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(width: 15),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const UserRecipesPage()),
+              ListTile(
+                leading: const Icon(Icons.settings, color: Color(0xFF5aa454)),
+                title: const Text('Account Settings'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Account settings coming soon!')),
                   );
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5aa454),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              ListTile(
+                leading: const Icon(Icons.lock, color: Color(0xFF5aa454)),
+                title: const Text('Privacy'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Privacy settings coming soon!')),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.help_outline, color: Color(0xFF5aa454)),
+                title: const Text('Help & Support'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Help & support coming soon!')),
+                  );
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text(
+                  'Sign Out',
+                  style: TextStyle(color: Colors.red),
                 ),
-                icon: const Icon(Icons.restaurant),
-                label: const Text(
-                  'Your Recipes',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showSignOutDialog(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatColumn(String label, String count) {
+    return Column(
+      children: [
+        Text(
+          count,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecipeGrid(List<Map<String, dynamic>> recipes) {
+    if (recipes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.restaurant, size: 80, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No recipes yet',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(2),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+      ),
+      itemCount: recipes.length,
+      itemBuilder: (context, index) {
+        final recipe = recipes[index];
+        return GestureDetector(
+          onTap: () {
+            _showRecipeDetail(recipe);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+            ),
+            child: Image.network(
+              recipe['imageUrl'],
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey[300],
+                  child: const Center(
+                    child: Icon(Icons.restaurant, size: 40, color: Colors.grey),
+                  ),
+                );
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                        : null,
+                    color: const Color(0xFF5aa454),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showRecipeDetail(Map<String, dynamic> recipe) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          contentPadding: EdgeInsets.zero,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Recipe Image
+              Container(
+                width: double.infinity,
+                height: 250,
+                child: Image.network(
+                  recipe['imageUrl'],
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: Icon(Icons.restaurant, size: 60, color: Colors.grey),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recipe['name'],
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: (recipe['hashtags'] as List<String>).map((tag) {
+                        return Text(
+                          tag,
+                          style: TextStyle(
+                            color: Colors.blue[700],
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => _showSignOutDialog(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[700],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Sign Out / Log In to Another Account',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
             ),
-          ),
-        ],
-      )
+          ],
+        );
+      },
     );
   }
 }
@@ -594,10 +892,13 @@ class UserRecipesPage extends StatefulWidget {
 }
 
 class _UserRecipesPageState extends State<UserRecipesPage> {
-  final List<Map<String, String>> _userRecipes = [
+  final List<Map<String, dynamic>> _userRecipes = [
     {
       'name': 'Hummus',
       'ingredients': 'Chickpeas, Tahini, Olive Oil',
+      'rating': 4.5,
+      'ratingCount': 12,
+      'isShared': true,
     },
   ];
 
@@ -606,8 +907,25 @@ class _UserRecipesPageState extends State<UserRecipesPage> {
       _userRecipes.add({
         'name': name,
         'ingredients': ingredients,
+        'rating': 0.0,
+        'ratingCount': 0,
+        'isShared': false,
       });
     });
+  }
+
+  void _toggleShare(int index) {
+    setState(() {
+      _userRecipes[index]['isShared'] = !_userRecipes[index]['isShared'];
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_userRecipes[index]['isShared'] 
+            ? 'Recipe shared with community!' 
+            : 'Recipe made private'),
+        backgroundColor: const Color(0xFF5aa454),
+      ),
+    );
   }
 
   @override
@@ -625,15 +943,63 @@ class _UserRecipesPageState extends State<UserRecipesPage> {
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 8),
             child: ListTile(
-              title: Text(
-                recipe['name'] ?? '',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      recipe['name'] ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                  ),
+                  if (recipe['isShared'])
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.public, size: 14, color: Colors.green),
+                          SizedBox(width: 4),
+                          Text('Shared', style: TextStyle(fontSize: 12, color: Colors.green)),
+                        ],
+                      ),
+                    ),
+                ],
               ),
-              subtitle: Text("Ingredients: ${recipe['ingredients'] ?? ''}"),
-              trailing: const Icon(Icons.arrow_forward_ios),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  Text("Ingredients: ${recipe['ingredients'] ?? ''}"),
+                  if (recipe['ratingCount'] > 0) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.star, size: 16, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${recipe['rating'].toStringAsFixed(1)} (${recipe['ratingCount']} ratings)',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+              trailing: IconButton(
+                icon: Icon(
+                  recipe['isShared'] ? Icons.public : Icons.lock,
+                  color: recipe['isShared'] ? Colors.green : Colors.grey,
+                ),
+                onPressed: () => _toggleShare(index),
+                tooltip: recipe['isShared'] ? 'Make private' : 'Share with community',
+              ),
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Recipe details soon!')),
+                  const SnackBar(content: Text('Recipe details coming soon!')),
                 );
               },
             ),
