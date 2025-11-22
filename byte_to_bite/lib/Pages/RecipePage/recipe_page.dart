@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class Recipe {
   final String name;
@@ -21,22 +23,52 @@ class Recipe {
     this.isFavorite = false,
     this.isBookmarked = false,
   });
+
+  // convert Firestore map → Recipe
+  factory Recipe.fromMap(Map<String, dynamic> data) {
+    return Recipe(
+      name: data['name'] ?? '',
+      imageUrl: data['imageUrl'] ?? '',
+      hashtags: List<String>.from(data['hashtags'] ?? []),
+      author: data['author'] ?? '',
+      rating: (data['rating'] ?? 0.0).toDouble(),
+      ratingCount: data['ratingCount'] ?? 0,
+      isFavorite: data['isFavorite'] ?? false,
+      isBookmarked: data['isBookmarked'] ?? false,
+    );
+  }
+
+  // convert Recipe → Map (for saving or passing to grid)
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'imageUrl': imageUrl,
+      'hashtags': hashtags,
+      'author': author,
+      'rating': rating,
+      'ratingCount': ratingCount,
+      'isFavorite': isFavorite,
+      'isBookmarked': isBookmarked,
+    };
+  }
 }
 
 class RecipeFeedPage extends StatefulWidget {
   final String userName;
-  final Function(Recipe recipe)? onToggleFavorite;
-  final Function(Recipe recipe)? onToggleBookmark;
-  final Set<String>? favoriteRecipeNames;
-  final Set<String>? bookmarkedRecipeNames;
+  final Stream<QuerySnapshot>? favoriteRecipeNamesStream;
+  final Stream<QuerySnapshot>? bookmarkedRecipeNamesStream;
+  final Function(Recipe)? onToggleFavorite;
+  final Function(Recipe)? onToggleBookmark;
+
+
 
   const RecipeFeedPage({
-    super.key, 
+    super.key,
     this.userName = 'User',
+    this.favoriteRecipeNamesStream,
+    this.bookmarkedRecipeNamesStream,
     this.onToggleFavorite,
     this.onToggleBookmark,
-    this.favoriteRecipeNames,
-    this.bookmarkedRecipeNames,
   });
 
   @override
@@ -44,9 +76,9 @@ class RecipeFeedPage extends StatefulWidget {
 }
 
 class _RecipeFeedPageState extends State<RecipeFeedPage> {
-  String _selectedFeed = 'Featured'; 
-  
-  // Sample recipe data this will come from database later 
+  String _selectedFeed = 'Featured';
+
+  // Featured recipes
   final List<Recipe> recipes = [
     Recipe(
       name: 'Vegan Bowl',
@@ -98,7 +130,7 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
     ),
   ];
 
-  // User submitted recipes
+  // User recipes
   final List<Recipe> userRecipes = [
     Recipe(
       name: 'Homemade Pasta Bake',
@@ -139,87 +171,84 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
   @override
   void initState() {
     super.initState();
-    // Initialize favorites and bookmarks 
-    if (widget.favoriteRecipeNames != null || widget.bookmarkedRecipeNames != null) {
+    _loadFavoritesAndBookmarks();
+  }
+
+  Future<void> _loadFavoritesAndBookmarks() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final favSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('favorites')
+        .get();
+
+    final bookmarkSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('bookmarks')
+        .get();
+
+    final favNames = favSnapshot.docs.map((doc) => doc['name'] as String).toSet();
+    final bookmarkNames = bookmarkSnapshot.docs.map((doc) => doc['name'] as String).toSet();
+
+    setState(() {
       for (var recipe in recipes) {
-        recipe.isFavorite = widget.favoriteRecipeNames?.contains(recipe.name) ?? false;
-        recipe.isBookmarked = widget.bookmarkedRecipeNames?.contains(recipe.name) ?? false;
+        recipe.isFavorite = favNames.contains(recipe.name);
+        recipe.isBookmarked = bookmarkNames.contains(recipe.name);
       }
       for (var recipe in userRecipes) {
-        recipe.isFavorite = widget.favoriteRecipeNames?.contains(recipe.name) ?? false;
-        recipe.isBookmarked = widget.bookmarkedRecipeNames?.contains(recipe.name) ?? false;
+        recipe.isFavorite = favNames.contains(recipe.name);
+        recipe.isBookmarked = bookmarkNames.contains(recipe.name);
       }
+    });
+  }
+
+  Future<void> _toggleFavorite(Recipe recipe) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final docRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('favorites')
+        .doc(recipe.name);
+
+    final snapshot = await docRef.get();
+    if (snapshot.exists) {
+      await docRef.delete();
+    } else {
+      await docRef.set({
+        'name': recipe.name,
+        'imageUrl': recipe.imageUrl,
+        'hashtags': recipe.hashtags,
+        'author': recipe.author,
+      });
     }
   }
 
-  void _showRatingDialog(Recipe recipe) {
-    double userRating = 0;
-    
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('Rate ${recipe.name}'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Tap a star to rate this recipe:'),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      return IconButton(
-                        icon: Icon(
-                          index < userRating ? Icons.star : Icons.star_border,
-                          color: Colors.amber,
-                          size: 40,
-                        ),
-                        onPressed: () {
-                          setDialogState(() {
-                            userRating = (index + 1).toDouble();
-                          });
-                        },
-                      );
-                    }),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: userRating > 0
-                      ? () {
-                          setState(() {
-                            // Calculate new average rating
-                            final totalRating = (recipe.rating * recipe.ratingCount) + userRating;
-                            recipe.ratingCount++;
-                            recipe.rating = totalRating / recipe.ratingCount;
-                          });
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Rated ${recipe.name} ${userRating.toInt()} stars!'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        }
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF479E36),
-                  ),
-                  child: const Text('Submit Rating'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+  Future<void> _toggleBookmark(Recipe recipe) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final docRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('bookmarks')
+        .doc(recipe.name);
+
+    final snapshot = await docRef.get();
+    if (snapshot.exists) {
+      await docRef.delete();
+    } else {
+      await docRef.set({
+        'name': recipe.name,
+        'imageUrl': recipe.imageUrl,
+        'hashtags': recipe.hashtags,
+        'author': recipe.author,
+      });
+    }
   }
 
   void _showFeedSelector() {
@@ -275,6 +304,75 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
     );
   }
 
+  void _showRatingDialog(Recipe recipe) {
+    double userRating = 0;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Rate ${recipe.name}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Tap a star to rate this recipe:'),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      return IconButton(
+                        icon: Icon(
+                          index < userRating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 40,
+                        ),
+                        onPressed: () {
+                          setDialogState(() {
+                            userRating = (index + 1).toDouble();
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: userRating > 0
+                      ? () {
+                          setState(() {
+                            final totalRating = (recipe.rating * recipe.ratingCount) + userRating;
+                            recipe.ratingCount++;
+                            recipe.rating = totalRating / recipe.ratingCount;
+                          });
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Rated ${recipe.name} ${userRating.toInt()} stars!'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF479E36),
+                  ),
+                  child: const Text('Submit Rating'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _shareRecipe(Recipe recipe) {
     final String shareText = '''
 Check out this amazing recipe on Byte to Bite!
@@ -288,7 +386,7 @@ Download Byte to Bite to see the full recipe!
 ''';
 
     Clipboard.setData(ClipboardData(text: shareText));
-    
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -341,10 +439,10 @@ Download Byte to Bite to see the full recipe!
       appBar: AppBar(
         backgroundColor: const Color(0xFF479E36),
         elevation: 0,
-        automaticallyImplyLeading: false, 
+        automaticallyImplyLeading: false,
         title: Row(
-          children: [
-            const Text(
+          children: const [
+            Text(
               'Byte to Bite',
               style: TextStyle(
                 color: Colors.white,
@@ -352,15 +450,14 @@ Download Byte to Bite to see the full recipe!
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.restaurant, color: Colors.white, size: 24),
+            SizedBox(width: 8),
+            Icon(Icons.restaurant, color: Colors.white, size: 24),
           ],
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_box_outlined, color: Colors.white, size: 28),
             onPressed: () {
-              // Add new recipe functionality
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Add new recipe coming soon!')),
               );
@@ -370,7 +467,6 @@ Download Byte to Bite to see the full recipe!
       ),
       body: Column(
         children: [
-          // Dropdown menu bar
           Container(
             width: double.infinity,
             color: Colors.white,
@@ -381,23 +477,72 @@ Download Byte to Bite to see the full recipe!
               },
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _selectedFeed,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down, color: Colors.black, size: 24),
+                children: const [
+                  // _selectedFeed text needs rebuild to reflect state:
+                  // Using a builder to avoid const:
                 ],
               ),
             ),
           ),
+          // Rebuild the dropdown row without const to show _selectedFeed
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _selectedFeed,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.keyboard_arrow_down, color: Colors.black, size: 24),
+              ],
+            ),
+          ),
           const Divider(height: 1, thickness: 1),
-          // Recipe feed
+
+          // Favorites count
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(FirebaseAuth.instance.currentUser!.uid)
+                .collection('favorites')
+                .snapshots(),
+            builder: (context, snapshot) {
+              final favorites = snapshot.hasData
+                  ? snapshot.data!.docs.map((doc) => doc['name'] as String).toSet()
+                  : <String>{};
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6.0),
+                child: Text("Favorites: ${favorites.length}"),
+              );
+            },
+          ),
+
+          // Bookmarks count
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(FirebaseAuth.instance.currentUser!.uid)
+                .collection('bookmarks')
+                .snapshots(),
+            builder: (context, snapshot) {
+              final bookmarks = snapshot.hasData
+                  ? snapshot.data!.docs.map((doc) => doc['name'] as String).toSet()
+                  : <String>{};
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6.0),
+                child: Text("Bookmarks: ${bookmarks.length}"),
+              );
+            },
+          ),
+
           Expanded(
             child: ListView.builder(
               itemCount: _currentRecipes.length,
@@ -475,7 +620,7 @@ Download Byte to Bite to see the full recipe!
               },
             ),
           ),
-          // buttons
+          // Action buttons
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Row(
@@ -490,15 +635,14 @@ Download Byte to Bite to see the full recipe!
                     setState(() {
                       recipe.isFavorite = !recipe.isFavorite;
                     });
-                    
-                    // Call the callback to update favorites in main app
-                    if (widget.onToggleFavorite != null) {
-                      widget.onToggleFavorite!(recipe);
-                    }
-                    
+
+                    _toggleFavorite(recipe);
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(recipe.isFavorite ? 'Added to favorites!' : 'Removed from favorites'),
+                        content: Text(
+                          recipe.isFavorite ? 'Added to favorites!' : 'Removed from favorites',
+                        ),
                         duration: const Duration(seconds: 1),
                       ),
                     );
@@ -507,7 +651,6 @@ Download Byte to Bite to see the full recipe!
                 IconButton(
                   icon: const Icon(Icons.chat_bubble_outline, size: 28),
                   onPressed: () {
-                    // jaislen implement Comment section here 
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Comments coming soon!'),
@@ -535,15 +678,14 @@ Download Byte to Bite to see the full recipe!
                     setState(() {
                       recipe.isBookmarked = !recipe.isBookmarked;
                     });
-                    
-                    // Call the callback to update bookmarks in main app
-                    if (widget.onToggleBookmark != null) {
-                      widget.onToggleBookmark!(recipe);
-                    }
-                    
+
+                    _toggleBookmark(recipe);
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(recipe.isBookmarked ? 'Recipe saved!' : 'Recipe removed from saved'),
+                        content: Text(
+                          recipe.isBookmarked ? 'Recipe saved!' : 'Recipe removed from saved',
+                        ),
                         duration: const Duration(seconds: 1),
                       ),
                     );
@@ -552,7 +694,7 @@ Download Byte to Bite to see the full recipe!
               ],
             ),
           ),
-          // Recipe name and rating
+          // Recipe name, rating, hashtags
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Column(
@@ -566,7 +708,6 @@ Download Byte to Bite to see the full recipe!
                   ),
                 ),
                 const SizedBox(height: 4),
-                // Rating display
                 if (recipe.ratingCount > 0)
                   Row(
                     children: [
@@ -582,7 +723,6 @@ Download Byte to Bite to see the full recipe!
                     ],
                   ),
                 const SizedBox(height: 8),
-                // Hashtags for dietary restrictions
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
