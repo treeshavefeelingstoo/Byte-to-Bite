@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
 import 'package:byte_to_bite/Pages/Signup/signup_page.dart';
 import 'package:byte_to_bite/main.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -110,38 +111,57 @@ class _LoginPageState extends State<LoginPage> {
                   SizedBox(
                     width: size.width * 0.5,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
                         final email = _emailController.text.trim();
                         final password = _passwordController.text;
 
-                        
                         if (email.isEmpty || password.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter email and password')),
+                            const SnackBar(
+                                content: Text('Please enter email and password')),
                           );
                           return;
                         }
 
-                        final username = email.contains('@') 
-                            ? email.split('@').first 
-                            : (email.isNotEmpty ? email : 'User');
+                        try {
+                          //  Firebase login
+                          final userCredential = await FirebaseAuth.instance
+                              .signInWithEmailAndPassword(
+                                  email: email, password: password);
 
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => DietaryApp(
-                              userName: username,
-                              initialIndex: 1, 
+                          final user = userCredential.user;
+                          final username =
+                              user?.email?.split('@').first ?? 'User';
+
+                          //  Navigate after successful login
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DietaryApp(
+                                userName: username,
+                                initialIndex: 1,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        } on FirebaseAuthException catch (e) {
+                          String message = 'Login failed';
+                          if (e.code == 'user-not-found') {
+                            message = 'No user found for that email.';
+                          } else if (e.code == 'wrong-password') {
+                            message = 'Wrong password provided.';
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(message)),
+                          );
+                        }
                       },
-                      child: Text('LOGIN'),
                       style: ElevatedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
+                      child: const Text('LOGIN'),
                     ),
                   ),
+
                   SizedBox(height: 12),
                   Row(
                     mainAxisSize: MainAxisSize.min,
