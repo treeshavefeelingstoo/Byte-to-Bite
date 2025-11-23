@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:byte_to_bite/Pages/AuthorPage/author_page.dart';
 
 class Recipe {
   final String name;
@@ -578,13 +579,25 @@ Download Byte to Bite to see the full recipe!
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  recipe.author,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AuthorPage()),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text(
+                    recipe.author,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
+                
                 const Spacer(),
                 const Icon(Icons.more_vert),
               ],
