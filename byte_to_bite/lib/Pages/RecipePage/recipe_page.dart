@@ -284,15 +284,15 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
               ListTile(
                 leading: const Icon(Icons.people, color: Color(0xFF479E36)),
                 title: const Text(
-                  'User Recipes',
+                  'Users You\'re Following',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
-                trailing: _selectedFeed == 'User Recipes'
+                trailing: _selectedFeed == 'Users You\'re Following'
                     ? const Icon(Icons.check, color: Color(0xFF479E36))
                     : null,
                 onTap: () {
                   setState(() {
-                    _selectedFeed = 'User Recipes';
+                    _selectedFeed = 'Users You\'re Following';
                   });
                   Navigator.pop(context);
                 },
@@ -467,81 +467,32 @@ Download Byte to Bite to see the full recipe!
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            child: GestureDetector(
-              onTap: () {
-                _showFeedSelector();
-              },
+          GestureDetector(
+            onTap: () {
+              _showFeedSelector();
+            },
+            child: Container(
+              width: double.infinity,
+              color: Colors.green[700],
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  // _selectedFeed text needs rebuild to reflect state:
-                  // Using a builder to avoid const:
+                children: [
+                  Text(
+                    _selectedFeed,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 24),
                 ],
               ),
             ),
           ),
-          // Rebuild the dropdown row without const to show _selectedFeed
-          Container(
-            width: double.infinity,
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  _selectedFeed,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.keyboard_arrow_down, color: Colors.black, size: 24),
-              ],
-            ),
-          ),
           const Divider(height: 1, thickness: 1),
-
-          // Favorites count
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .doc(FirebaseAuth.instance.currentUser!.uid)
-                .collection('favorites')
-                .snapshots(),
-            builder: (context, snapshot) {
-              final favorites = snapshot.hasData
-                  ? snapshot.data!.docs.map((doc) => doc['name'] as String).toSet()
-                  : <String>{};
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6.0),
-                child: Text("Favorites: ${favorites.length}"),
-              );
-            },
-          ),
-
-          // Bookmarks count
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .doc(FirebaseAuth.instance.currentUser!.uid)
-                .collection('bookmarks')
-                .snapshots(),
-            builder: (context, snapshot) {
-              final bookmarks = snapshot.hasData
-                  ? snapshot.data!.docs.map((doc) => doc['name'] as String).toSet()
-                  : <String>{};
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6.0),
-                child: Text("Bookmarks: ${bookmarks.length}"),
-              );
-            },
-          ),
 
           Expanded(
             child: ListView.builder(

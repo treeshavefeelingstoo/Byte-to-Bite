@@ -14,6 +14,8 @@ import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 
 Future<void> main() async {
   // Ensure Flutter bindings are initialized before Firebase
@@ -90,10 +92,6 @@ class _DietaryAppState extends State<DietaryApp> {
   final Map<DateTime, Set<String>> _groceriesByWeek = {};
   final Map<String, bool> _checkedGroceries = {};
   Set<Meal> _savedRecipes = {};
-
-
-  List<Recipe> _favoriteRecipes = [];
-  List<Recipe> _bookmarkedRecipes = [];
 
   
 
@@ -327,8 +325,6 @@ Future<void> _toggleBookmarkRecipe(Recipe recipe) async {
 
       ProfilePage(
         userName: widget.userName,
-        favoriteRecipes: _favoriteRecipes,
-        bookmarkedRecipes: _bookmarkedRecipes,
       ),
 
     ];
@@ -489,14 +485,10 @@ class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
 
 class ProfilePage extends StatefulWidget {
   final String userName;
-  final List<Recipe> bookmarkedRecipes;   // <-- add this
-  final List<Recipe> favoriteRecipes;
   
   const ProfilePage({
     super.key, 
-    this.userName = 'User', 
-    required this.bookmarkedRecipes,      // <-- constructor param
-    required this.favoriteRecipes,
+    this.userName = 'User',
   });
 
   @override
@@ -516,6 +508,88 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _uploadProfilePicture() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final ImagePicker picker = ImagePicker();
+      
+      // Show options to pick from gallery or camera
+      final source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Select Image Source'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Gallery'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (source == null) return;
+
+      final XFile? image = await picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 75,
+      );
+
+      if (image == null) return;
+
+      // Show loading indicator
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Uploading profile picture...')),
+      );
+
+      // Upload to Firebase Storage
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_pictures')
+          .child('${user.uid}.jpg');
+
+      final uploadTask = await storageRef.putFile(File(image.path));
+
+      // Get download URL
+      final downloadUrl = await uploadTask.ref.getDownloadURL();
+
+      // Save URL to Firestore
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set({'profilePictureUrl': downloadUrl}, SetOptions(merge: true));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile picture updated!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showSignOutDialog(BuildContext context) {
@@ -573,64 +647,65 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         children: <Widget>[
           const SizedBox(height: 30),
           // Profile Picture Circle
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF5aa454),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[300]!, width: 3),
-                ),
-                child: const Icon(
-                  Icons.person,
-                  size: 60,
-                  color: Colors.white,
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Upload profile picture feature coming soon!')),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final profilePictureUrl = snapshot.data?.data()?['profilePictureUrl'] as String?;
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF5aa454),
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF5aa454), width: 2),
+                      border: Border.all(color: Colors.grey[300]!, width: 3),
+                      image: profilePictureUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(profilePictureUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      size: 20,
-                      color: Color(0xFF5aa454),
+                    child: profilePictureUrl == null
+                        ? const Icon(
+                            Icons.person,
+                            size: 60,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: _uploadProfilePicture,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFF5aa454), width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt,
+                          size: 20,
+                          color: Color(0xFF5aa454),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 15),
-          // User Name
-          // AUTH INFO (FirebaseAuth)
-          Text(
-            user?.email ?? 'No email',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          
-          const SizedBox(height: 20),
 
-          //  FIRESTORE PROFILE DETAILS
           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
                 .collection('users')
@@ -638,23 +713,29 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 .snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return const CircularProgressIndicator();
+                return const Text(
+                  'Loading...',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                );
               }
               final data = snapshot.data!.data();
-              if (data == null) {
-                return const Text('No profile data found');
-              }
+              final firstName = data?['firstName'] ?? 'User';
 
-              return Column(
-                children: [
-                  Text('First name: ${data['firstName'] ?? ''}'),
-                  Text('Last name: ${data['lastName'] ?? ''}'),
-                  Text('Phone: ${data['phone'] ?? ''}'),
-                ],
+              return Text(
+                firstName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               );
             },
           ),
-
+          
           const SizedBox(height: 20),
 
           //  Stats Row (Posts, Followers, Following)
@@ -701,6 +782,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             child: TabBarView(
               controller: _tabController,
               children: [
+                // Posts tab
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('recipes')
@@ -719,11 +801,44 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                     return _buildRecipeGrid(recipes);                  
                   },
                 ),
-                // Saved tab
-              _buildRecipeGrid(widget.bookmarkedRecipes.toList()), 
-              // Favorites tab
-              _buildRecipeGrid(widget.favoriteRecipes.toList()), 
+                // Saved (Bookmarks) tab
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .collection('bookmarks')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
+                    final recipes = snapshot.data!.docs
+                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .toList();
+
+                    return _buildRecipeGrid(recipes);                  
+                  },
+                ),
+                // Favorites tab
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .collection('favorites')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final recipes = snapshot.data!.docs
+                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .toList();
+
+                    return _buildRecipeGrid(recipes);                  
+                  },
+                ),
               ],
             ),
           ),
