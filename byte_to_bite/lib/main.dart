@@ -23,8 +23,6 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
-  await seedExampleRecipes();
 
   runApp(const MyApp());
 }
