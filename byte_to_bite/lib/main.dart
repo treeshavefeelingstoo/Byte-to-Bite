@@ -14,8 +14,7 @@ import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
+
 
 Future<void> main() async {
   // Ensure Flutter bindings are initialized before Firebase
@@ -510,87 +509,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     super.dispose();
   }
 
-  Future<void> _uploadProfilePicture() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
 
-    try {
-      final ImagePicker picker = ImagePicker();
-      
-      // Show options to pick from gallery or camera
-      final source = await showDialog<ImageSource>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Select Image Source'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Gallery'),
-                onTap: () => Navigator.pop(context, ImageSource.gallery),
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
-                onTap: () => Navigator.pop(context, ImageSource.camera),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      if (source == null) return;
-
-      final XFile? image = await picker.pickImage(
-        source: source,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 75,
-      );
-
-      if (image == null) return;
-
-      // Show loading indicator
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Uploading profile picture...')),
-      );
-
-      // Upload to Firebase Storage
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('profile_pictures')
-          .child('${user.uid}.jpg');
-
-      final uploadTask = await storageRef.putFile(File(image.path));
-
-      // Get download URL
-      final downloadUrl = await uploadTask.ref.getDownloadURL();
-
-      // Save URL to Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set({'profilePictureUrl': downloadUrl}, SetOptions(merge: true));
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile picture updated!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
 
   void _showSignOutDialog(BuildContext context) {
     showDialog(
@@ -684,7 +603,6 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                     bottom: 0,
                     right: 0,
                     child: GestureDetector(
-                      onTap: _uploadProfilePicture,
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
