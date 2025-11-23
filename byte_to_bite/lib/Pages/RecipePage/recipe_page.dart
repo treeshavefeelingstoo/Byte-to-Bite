@@ -13,7 +13,13 @@ class Recipe {
   bool isFavorite;
   bool isBookmarked;
 
-  // for comments 
+  // likes/dislikes state
+  int likes;
+  int dislikes;
+  bool isLiked;
+  bool isDisliked;
+
+  // for comments
   List<Map<String, String>> comments = [];
   bool showComments = false;
   TextEditingController commentController = TextEditingController();
@@ -27,6 +33,10 @@ class Recipe {
     this.ratingCount = 0,
     this.isFavorite = false,
     this.isBookmarked = false,
+    this.likes = 0,
+    this.dislikes = 0,
+    this.isLiked = false,
+    this.isDisliked = false,
   });
 
   factory Recipe.fromMap(Map<String, dynamic> data) {
@@ -39,6 +49,10 @@ class Recipe {
       ratingCount: data['ratingCount'] ?? 0,
       isFavorite: data['isFavorite'] ?? false,
       isBookmarked: data['isBookmarked'] ?? false,
+      likes: data['likes'] ?? 0,
+      dislikes: data['dislikes'] ?? 0,
+      isLiked: data['isLiked'] ?? false,
+      isDisliked: data['isDisliked'] ?? false,
     );
   }
 
@@ -52,6 +66,10 @@ class Recipe {
       'ratingCount': ratingCount,
       'isFavorite': isFavorite,
       'isBookmarked': isBookmarked,
+      'likes': likes,
+      'dislikes': dislikes,
+      'isLiked': isLiked,
+      'isDisliked': isDisliked,
     };
   }
 }
@@ -348,14 +366,16 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
                   onPressed: userRating > 0
                       ? () {
                           setState(() {
-                            final totalRating = (recipe.rating * recipe.ratingCount) + userRating;
+                            final totalRating =
+                                (recipe.rating * recipe.ratingCount) + userRating;
                             recipe.ratingCount++;
                             recipe.rating = totalRating / recipe.ratingCount;
                           });
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Rated ${recipe.name} ${userRating.toInt()} stars'),
+                              content: Text(
+                                  'Rated ${recipe.name} ${userRating.toInt()} stars'),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -487,7 +507,8 @@ Download Byte to Bite to see the full recipe.
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down, color: Colors.black, size: 24),
+                  const Icon(Icons.keyboard_arrow_down,
+                      color: Colors.black, size: 24),
                 ],
               ),
             ),
@@ -503,7 +524,9 @@ Download Byte to Bite to see the full recipe.
                 .snapshots(),
             builder: (context, snapshot) {
               final favorites = snapshot.hasData
-                  ? snapshot.data!.docs.map((doc) => doc['name'] as String).toSet()
+                  ? snapshot.data!.docs
+                      .map((doc) => doc['name'] as String)
+                      .toSet()
                   : <String>{};
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6.0),
@@ -521,7 +544,9 @@ Download Byte to Bite to see the full recipe.
                 .snapshots(),
             builder: (context, snapshot) {
               final bookmarks = snapshot.hasData
-                  ? snapshot.data!.docs.map((doc) => doc['name'] as String).toSet()
+                  ? snapshot.data!.docs
+                      .map((doc) => doc['name'] as String)
+                      .toSet()
                   : <String>{};
               return Padding(
                 padding: const EdgeInsets.only(bottom: 6.0),
@@ -552,7 +577,7 @@ Download Byte to Bite to see the full recipe.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with author info
+          // Header with author info + rating + menu
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Row(
@@ -560,8 +585,9 @@ Download Byte to Bite to see the full recipe.
                 CircleAvatar(
                   backgroundColor: const Color(0xFF479E36),
                   child: Text(
-                    recipe.author[0],
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    recipe.author.isNotEmpty ? recipe.author[0] : '?',
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -573,7 +599,34 @@ Download Byte to Bite to see the full recipe.
                   ),
                 ),
                 const Spacer(),
-                const Icon(Icons.more_vert),
+
+                // Rating button moved to top
+                IconButton(
+                  icon: const Icon(Icons.star_border, size: 28),
+                  onPressed: () => _showRatingDialog(recipe),
+                ),
+
+                // 3-dot menu with Share
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'share') {
+                      _shareRecipe(recipe);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem<String>(
+                      value: 'share',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.share, color: Colors.black54),
+                          SizedBox(width: 10),
+                          Text("Share"),
+                        ],
+                      ),
+                    ),
+                  ],
+                  icon: const Icon(Icons.more_vert),
+                ),
               ],
             ),
           ),
@@ -589,15 +642,18 @@ Download Byte to Bite to see the full recipe.
             ),
           ),
 
-          // Buttons Row
+          // Buttons Row (favorites, likes, dislikes, comments, bookmark)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Row(
               children: [
                 // Favorite
                 IconButton(
                   icon: Icon(
-                    recipe.isFavorite ? Icons.favorite : Icons.favorite_border,
+                    recipe.isFavorite
+                        ? Icons.favorite
+                        : Icons.favorite_border,
                     size: 28,
                     color: recipe.isFavorite ? Colors.red : Colors.black,
                   ),
@@ -611,7 +667,9 @@ Download Byte to Bite to see the full recipe.
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          recipe.isFavorite ? 'Added to favorites' : 'Removed from favorites',
+                          recipe.isFavorite
+                              ? 'Added to favorites'
+                              : 'Removed from favorites',
                         ),
                         duration: const Duration(seconds: 1),
                       ),
@@ -619,10 +677,72 @@ Download Byte to Bite to see the full recipe.
                   },
                 ),
 
-                // COMMENT BUTTON
+                // Like button + count
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.thumb_up,
+                        color: recipe.isLiked
+                            ? const Color.fromARGB(255, 7, 118, 7)
+                            : Colors.black,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          if (recipe.isLiked) {
+                            recipe.isLiked = false;
+                            if (recipe.likes > 0) recipe.likes--;
+                          } else {
+                            recipe.isLiked = true;
+                            recipe.likes++;
+                            if (recipe.isDisliked) {
+                              recipe.isDisliked = false;
+                              if (recipe.dislikes > 0) recipe.dislikes--;
+                            }
+                          }
+                        });
+                      },
+                    ),
+                    Text(recipe.likes.toString()),
+                  ],
+                ),
+
+                // Dislike button + count
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.thumb_down,
+                        color: recipe.isDisliked
+                            ? const Color.fromARGB(255, 7, 118, 7)
+                            : Colors.black,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          if (recipe.isDisliked) {
+                            recipe.isDisliked = false;
+                            if (recipe.dislikes > 0) recipe.dislikes--;
+                          } else {
+                            recipe.isDisliked = true;
+                            recipe.dislikes++;
+                            if (recipe.isLiked) {
+                              recipe.isLiked = false;
+                              if (recipe.likes > 0) recipe.likes--;
+                            }
+                          }
+                        });
+                      },
+                    ),
+                    Text(recipe.dislikes.toString()),
+                  ],
+                ),
+
+                // Comment button
                 IconButton(
                   icon: Icon(
-                    recipe.showComments ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                    recipe.showComments
+                        ? Icons.chat_bubble
+                        : Icons.chat_bubble_outline,
                     size: 28,
                   ),
                   onPressed: () {
@@ -632,26 +752,18 @@ Download Byte to Bite to see the full recipe.
                   },
                 ),
 
-                // Rating
-                IconButton(
-                  icon: const Icon(Icons.star_border, size: 28),
-                  onPressed: () => _showRatingDialog(recipe),
-                ),
-
-                // Share
-                IconButton(
-                  icon: const Icon(Icons.share, size: 28),
-                  onPressed: () => _shareRecipe(recipe),
-                ),
-
                 const Spacer(),
 
                 // Bookmark
                 IconButton(
                   icon: Icon(
-                    recipe.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                    recipe.isBookmarked
+                        ? Icons.bookmark
+                        : Icons.bookmark_border,
                     size: 28,
-                    color: recipe.isBookmarked ? const Color(0xFF479E36) : Colors.black,
+                    color: recipe.isBookmarked
+                        ? const Color(0xFF479E36)
+                        : Colors.black,
                   ),
                   onPressed: () {
                     setState(() {
@@ -663,7 +775,9 @@ Download Byte to Bite to see the full recipe.
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          recipe.isBookmarked ? 'Recipe saved' : 'Recipe removed from saved',
+                          recipe.isBookmarked
+                              ? 'Recipe saved'
+                              : 'Recipe removed from saved',
                         ),
                         duration: const Duration(seconds: 1),
                       ),
@@ -696,7 +810,8 @@ Download Byte to Bite to see the full recipe.
                 if (recipe.ratingCount > 0)
                   Row(
                     children: [
-                      const Icon(Icons.star, color: Colors.amber, size: 18),
+                      const Icon(Icons.star,
+                          color: Colors.amber, size: 18),
                       const SizedBox(width: 4),
                       Text(
                         '${recipe.rating.toStringAsFixed(1)} (${recipe.ratingCount} ratings)',
@@ -732,7 +847,8 @@ Download Byte to Bite to see the full recipe.
       ),
     );
   }
-/// comments section
+
+  /// comments section
   Widget _buildCommentsSection(Recipe recipe) {
     final controller = recipe.commentController;
 
@@ -748,7 +864,8 @@ Download Byte to Bite to see the full recipe.
           const SizedBox(height: 8),
 
           if (recipe.comments.isEmpty)
-            const Text("No comments yet.", style: TextStyle(color: Colors.grey)),
+            const Text("No comments yet.",
+                style: TextStyle(color: Colors.grey)),
 
           if (recipe.comments.isNotEmpty)
             Column(
