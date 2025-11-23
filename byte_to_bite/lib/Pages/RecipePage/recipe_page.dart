@@ -13,6 +13,11 @@ class Recipe {
   bool isFavorite;
   bool isBookmarked;
 
+  // for comments 
+  List<Map<String, String>> comments = [];
+  bool showComments = false;
+  TextEditingController commentController = TextEditingController();
+
   Recipe({
     required this.name,
     required this.imageUrl,
@@ -24,7 +29,6 @@ class Recipe {
     this.isBookmarked = false,
   });
 
-  // convert Firestore map → Recipe
   factory Recipe.fromMap(Map<String, dynamic> data) {
     return Recipe(
       name: data['name'] ?? '',
@@ -38,7 +42,6 @@ class Recipe {
     );
   }
 
-  // convert Recipe → Map (for saving or passing to grid)
   Map<String, dynamic> toMap() {
     return {
       'name': name,
@@ -59,8 +62,6 @@ class RecipeFeedPage extends StatefulWidget {
   final Stream<QuerySnapshot>? bookmarkedRecipeNamesStream;
   final Function(Recipe)? onToggleFavorite;
   final Function(Recipe)? onToggleBookmark;
-
-
 
   const RecipeFeedPage({
     super.key,
@@ -354,7 +355,7 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Rated ${recipe.name} ${userRating.toInt()} stars!'),
+                              content: Text('Rated ${recipe.name} ${userRating.toInt()} stars'),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -375,14 +376,14 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
 
   void _shareRecipe(Recipe recipe) {
     final String shareText = '''
-Check out this amazing recipe on Byte to Bite!
+Check out this recipe on Byte to Bite
 
-🍽️ ${recipe.name}
-👤 By ${recipe.author}
-⭐ Rating: ${recipe.ratingCount > 0 ? '${recipe.rating.toStringAsFixed(1)}/5.0 (${recipe.ratingCount} ratings)' : 'Not yet rated'}
+${recipe.name}
+By ${recipe.author}
+Rating: ${recipe.ratingCount > 0 ? '${recipe.rating.toStringAsFixed(1)}/5.0 (${recipe.ratingCount} ratings)' : 'Not yet rated'}
 ${recipe.hashtags.join(' ')}
 
-Download Byte to Bite to see the full recipe!
+Download Byte to Bite to see the full recipe.
 ''';
 
     Clipboard.setData(ClipboardData(text: shareText));
@@ -395,7 +396,7 @@ Download Byte to Bite to see the full recipe!
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Recipe details copied to clipboard!'),
+              const Text('The recipe details have been copied to your clipboard.'),
               const SizedBox(height: 20),
               Text(
                 shareText,
@@ -411,12 +412,12 @@ Download Byte to Bite to see the full recipe!
               onPressed: () => Navigator.pop(context),
               child: const Text('Close'),
             ),
-            ElevatedButton.icon(
+            ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Share to social media coming soon!'),
+                    content: Text('Share to social media coming soon'),
                     backgroundColor: Color(0xFF479E36),
                   ),
                 );
@@ -424,8 +425,7 @@ Download Byte to Bite to see the full recipe!
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF479E36),
               ),
-              icon: const Icon(Icons.share),
-              label: const Text('Share to Social Media'),
+              child: const Text('Share'),
             ),
           ],
         );
@@ -459,7 +459,7 @@ Download Byte to Bite to see the full recipe!
             icon: const Icon(Icons.add_box_outlined, color: Colors.white, size: 28),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Add new recipe coming soon!')),
+                const SnackBar(content: Text('Add new recipe coming soon')),
               );
             },
           ),
@@ -477,37 +477,24 @@ Download Byte to Bite to see the full recipe!
               },
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  // _selectedFeed text needs rebuild to reflect state:
-                  // Using a builder to avoid const:
+                children: [
+                  Text(
+                    _selectedFeed,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down, color: Colors.black, size: 24),
                 ],
               ),
             ),
           ),
-          // Rebuild the dropdown row without const to show _selectedFeed
-          Container(
-            width: double.infinity,
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  _selectedFeed,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.keyboard_arrow_down, color: Colors.black, size: 24),
-              ],
-            ),
-          ),
           const Divider(height: 1, thickness: 1),
 
-          // Favorites count
+          // Favorites Count
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
@@ -525,7 +512,7 @@ Download Byte to Bite to see the full recipe!
             },
           ),
 
-          // Bookmarks count
+          // Bookmarks Count
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
@@ -590,6 +577,7 @@ Download Byte to Bite to see the full recipe!
               ],
             ),
           ),
+
           // Recipe image
           Container(
             width: double.infinity,
@@ -598,33 +586,15 @@ Download Byte to Bite to see the full recipe!
             child: Image.network(
               recipe.imageUrl,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Colors.grey[300],
-                  child: const Center(
-                    child: Icon(Icons.restaurant, size: 80, color: Colors.grey),
-                  ),
-                );
-              },
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded /
-                            loadingProgress.expectedTotalBytes!
-                        : null,
-                    color: const Color(0xFF479E36),
-                  ),
-                );
-              },
             ),
           ),
-          // Action buttons
+
+          // Buttons Row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Row(
               children: [
+                // Favorite
                 IconButton(
                   icon: Icon(
                     recipe.isFavorite ? Icons.favorite : Icons.favorite_border,
@@ -641,33 +611,42 @@ Download Byte to Bite to see the full recipe!
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          recipe.isFavorite ? 'Added to favorites!' : 'Removed from favorites',
+                          recipe.isFavorite ? 'Added to favorites' : 'Removed from favorites',
                         ),
                         duration: const Duration(seconds: 1),
                       ),
                     );
                   },
                 ),
+
+                // COMMENT BUTTON
                 IconButton(
-                  icon: const Icon(Icons.chat_bubble_outline, size: 28),
+                  icon: Icon(
+                    recipe.showComments ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                    size: 28,
+                  ),
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Comments coming soon!'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
+                    setState(() {
+                      recipe.showComments = !recipe.showComments;
+                    });
                   },
                 ),
+
+                // Rating
                 IconButton(
                   icon: const Icon(Icons.star_border, size: 28),
                   onPressed: () => _showRatingDialog(recipe),
                 ),
+
+                // Share
                 IconButton(
                   icon: const Icon(Icons.share, size: 28),
                   onPressed: () => _shareRecipe(recipe),
                 ),
+
                 const Spacer(),
+
+                // Bookmark
                 IconButton(
                   icon: Icon(
                     recipe.isBookmarked ? Icons.bookmark : Icons.bookmark_border,
@@ -684,7 +663,7 @@ Download Byte to Bite to see the full recipe!
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          recipe.isBookmarked ? 'Recipe saved!' : 'Recipe removed from saved',
+                          recipe.isBookmarked ? 'Recipe saved' : 'Recipe removed from saved',
                         ),
                         duration: const Duration(seconds: 1),
                       ),
@@ -694,6 +673,10 @@ Download Byte to Bite to see the full recipe!
               ],
             ),
           ),
+
+          // Inline Comments
+          if (recipe.showComments) _buildCommentsSection(recipe),
+
           // Recipe name, rating, hashtags
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
@@ -707,14 +690,16 @@ Download Byte to Bite to see the full recipe!
                     fontSize: 18,
                   ),
                 ),
+
                 const SizedBox(height: 4),
+
                 if (recipe.ratingCount > 0)
                   Row(
                     children: [
                       const Icon(Icons.star, color: Colors.amber, size: 18),
                       const SizedBox(width: 4),
                       Text(
-                        '${recipe.rating.toStringAsFixed(1)} (${recipe.ratingCount} ${recipe.ratingCount == 1 ? 'rating' : 'ratings'})',
+                        '${recipe.rating.toStringAsFixed(1)} (${recipe.ratingCount} ratings)',
                         style: TextStyle(
                           color: Colors.grey[700],
                           fontSize: 14,
@@ -722,7 +707,9 @@ Download Byte to Bite to see the full recipe!
                       ),
                     ],
                   ),
+
                 const SizedBox(height: 8),
+
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
@@ -740,6 +727,86 @@ Download Byte to Bite to see the full recipe!
                 const SizedBox(height: 12),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+/// comments section
+  Widget _buildCommentsSection(Recipe recipe) {
+    final controller = recipe.commentController;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Comments",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+
+          if (recipe.comments.isEmpty)
+            const Text("No comments yet.", style: TextStyle(color: Colors.grey)),
+
+          if (recipe.comments.isNotEmpty)
+            Column(
+              children: recipe.comments.map((c) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: const Color(0xFF479E36),
+                        child: Text(
+                          c["user"]![0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(c["text"]!)),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    hintText: "Write a comment...",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.send, color: Color(0xFF479E36)),
+                onPressed: () {
+                  final text = controller.text.trim();
+                  if (text.isEmpty) return;
+
+                  setState(() {
+                    recipe.comments.add({
+                      "user": widget.userName,
+                      "text": text,
+                    });
+                  });
+
+                  controller.clear();
+                },
+              ),
+            ],
           ),
         ],
       ),
