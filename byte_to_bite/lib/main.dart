@@ -6,10 +6,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
 import 'package:byte_to_bite/constants.dart';
+
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
+
 import 'package:byte_to_bite/Pages/HomePage/home_page.dart';
 import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 Future<void> main() async {
   // Ensure Flutter bindings are initialized before Firebase
@@ -26,6 +30,7 @@ Future<void> main() async {
 
 
 class MyApp extends StatelessWidget {
+  
   const MyApp({super.key});
 
   // This widget is the root of your application.
@@ -84,9 +89,13 @@ class _DietaryAppState extends State<DietaryApp> {
   final Map<DateTime, List<Meal>> _mealPlan = {};
   final Map<DateTime, Set<String>> _groceriesByWeek = {};
   final Map<String, bool> _checkedGroceries = {};
-  final Set<Meal> _savedRecipes = {}; // From meal planner
-  final Set<Map<String, dynamic>> _favoriteRecipes = {}; // Heart icon from recipe feed
-  final Set<Map<String, dynamic>> _bookmarkedRecipes = {}; // Save icon from recipe feed
+  Set<Meal> _savedRecipes = {};
+
+
+  List<Recipe> _favoriteRecipes = [];
+  List<Recipe> _bookmarkedRecipes = [];
+
+  
 
   @override
   void initState() {
@@ -164,24 +173,43 @@ class _DietaryAppState extends State<DietaryApp> {
       return _groceriesByWeek[weekStart] ?? <String>{};
     }
 
-    void _toggleSaveRecipe(Meal meal) {
-      setState(() {
-        final existingMeal = _savedRecipes.firstWhere(
-          (m) => m.name == meal.name,
-          orElse: () => meal,
-        );
-        if (_savedRecipes.contains(existingMeal)) {
-          _savedRecipes.remove(existingMeal);
-          _favoriteRecipes.removeWhere((r) => r['name'] == meal.name);
-        } else {
-          _savedRecipes.add(meal);
-          // add to favorites 
-          _addMealToFavorites(meal);
-        }
-      });
-    }
+    Future<void> _toggleSaveRecipe(Meal meal) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    void _addMealToFavorites(Meal meal) {
+  final docRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('saved')
+      .doc(meal.name); // replace with meal.id if available
+
+  final snapshot = await docRef.get();
+
+  if (snapshot.exists) {
+    await docRef.delete();
+    setState(() {
+      _savedRecipes?.remove(meal);
+    });
+  } else {
+    await docRef.set({
+      'name': meal.name,
+      'ingredients': meal.ingredients.map((i) => i.toString()).toList(),
+      'restrictions': meal.restrictions.map((r) => r.toString()).toList(),
+      'color': meal.color.value,
+      'icon': meal.icon.codePoint,
+    });
+    setState(() {
+      _savedRecipes?.add(meal);
+    });
+  }
+}
+
+
+
+    Future<void> _addMealToFavorites(Meal meal) async  {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
       // Map meal colors to image URLs 
       final Map<Color, String> colorToImage = {
         Colors.green: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400',
@@ -201,61 +229,69 @@ class _DietaryAppState extends State<DietaryApp> {
         'author': 'Meal Planner',
       };
 
-      _favoriteRecipes.add(mealMap);
+      await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('favorites')
+      .doc(meal.name) // use recipe name or a unique ID
+      .set(mealMap);
+
     }
 
-    void _toggleFavoriteRecipe(dynamic recipe) {
-      setState(() {
-        final Map<String, dynamic> recipeMap = {
-          'name': recipe.name,
-          'imageUrl': recipe.imageUrl,
-          'hashtags': recipe.hashtags,
-          'author': recipe.author,
-        };
-        
-        // Check if recipe already exists in favorites
-        final existingRecipe = _favoriteRecipes.firstWhere(
-          (r) => r['name'] == recipeMap['name'],
-          orElse: () => {},
-        );
-        
-        if (existingRecipe.isNotEmpty) {
-          _favoriteRecipes.remove(existingRecipe);
-        } else {
-          _favoriteRecipes.add(recipeMap);
-        }
-      });
-    }
+    Future<void> _toggleFavoriteRecipe(Recipe recipe) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    void _toggleBookmarkRecipe(dynamic recipe) {
-      setState(() {
-        final Map<String, dynamic> recipeMap = {
-          'name': recipe.name,
-          'imageUrl': recipe.imageUrl,
-          'hashtags': recipe.hashtags,
-          'author': recipe.author,
-        };
-        
-        // Check if recipe already exists in bookmarked
-        final existingRecipe = _bookmarkedRecipes.firstWhere(
-          (r) => r['name'] == recipeMap['name'],
-          orElse: () => {},
-        );
-        
-        if (existingRecipe.isNotEmpty) {
-          _bookmarkedRecipes.remove(existingRecipe);
-        } else {
-          _bookmarkedRecipes.add(recipeMap);
-        }
-      });
-    }
+  final docRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('favorites')
+      .doc(recipe.name);
+
+  final snapshot = await docRef.get();
+  if (snapshot.exists) {
+    await docRef.delete();
+  } else {
+    await docRef.set({
+      'name': recipe.name,
+      'imageUrl': recipe.imageUrl,
+      'hashtags': recipe.hashtags,
+      'author': recipe.author,
+    });
+  }
+}
+
+Future<void> _toggleBookmarkRecipe(Recipe recipe) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final docRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('bookmarks')
+      .doc(recipe.name);
+
+  final snapshot = await docRef.get();
+  if (snapshot.exists) {
+    await docRef.delete();
+  } else {
+    await docRef.set({
+      'name': recipe.name,
+      'imageUrl': recipe.imageUrl,
+      'hashtags': recipe.hashtags,
+      'author': recipe.author,
+    });
+  }
+}
+
+
 
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       HomePage(
-        mealPlan: _mealPlan,
+        mealPlan: _mealPlan as Map<DateTime, List<Meal>>?,
         onWeekGroceriesChanged: _handleWeekGroceriesChanged,
         getWeekGroceries: _getWeekGroceries,
         excludedIngredients: excludedIngredients,
@@ -265,35 +301,36 @@ class _DietaryAppState extends State<DietaryApp> {
         userName: widget.userName,
         onToggleFavorite: _toggleFavoriteRecipe,
         onToggleBookmark: _toggleBookmarkRecipe,
-        favoriteRecipeNames: _favoriteRecipes.map((r) => r['name'] as String).toSet(),
-        bookmarkedRecipeNames: _bookmarkedRecipes.map((r) => r['name'] as String).toSet(),
+        favoriteRecipeNamesStream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(FirebaseAuth.instance.currentUser!.uid)
+            .collection('favorites')
+            .snapshots(),
+        bookmarkedRecipeNamesStream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(FirebaseAuth.instance.currentUser!.uid)
+            .collection('bookmarks')
+            .snapshots(),
       ),
       AllergySelectorScreen(
         onRestrictionsChanged: _updateExclusions,
         initialSelections: excludedIngredients,
       ),
-      MealPlannerPage(
-        mealPlan: _mealPlan,
-        onWeekGroceriesChanged: _handleWeekGroceriesChanged,
-        getWeekGroceries: _getWeekGroceries,
-        excludedIngredients: excludedIngredients,
-        savedRecipes: _savedRecipes,
-        onToggleSaveRecipe: _toggleSaveRecipe,
-      ),
+    MealPlannerPage(
+      excludedIngredients: excludedIngredients,
+      savedRecipes: _savedRecipes,
+      onToggleSaveRecipe: _toggleSaveRecipe,
+    ),
+    GroceryPage(
+      onBackToMealPrep: () => setState(() => _selectedIndex = 3),
+    ),
 
-      GroceryPage(
-        groceriesByWeek: _groceriesByWeek,
-        checkedGroceries: _checkedGroceries,
-        onToggleItem: _toggleGroceryItem,
-        onDeleteWeek: _deleteWeek,
-        onBackToMealPrep: () => setState(() => _selectedIndex = 3),
-      ),
       ProfilePage(
-        userName: widget.userName, 
-        savedRecipes: _savedRecipes,
+        userName: widget.userName,
         favoriteRecipes: _favoriteRecipes,
         bookmarkedRecipes: _bookmarkedRecipes,
       ),
+
     ];
 
       return Theme(
@@ -452,16 +489,14 @@ class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
 
 class ProfilePage extends StatefulWidget {
   final String userName;
-  final Set<Meal> savedRecipes;
-  final Set<Map<String, dynamic>> favoriteRecipes;
-  final Set<Map<String, dynamic>> bookmarkedRecipes;
+  final List<Recipe> bookmarkedRecipes;   // <-- add this
+  final List<Recipe> favoriteRecipes;
   
   const ProfilePage({
     super.key, 
     this.userName = 'User', 
-    required this.savedRecipes,
+    required this.bookmarkedRecipes,      // <-- constructor param
     required this.favoriteRecipes,
-    required this.bookmarkedRecipes,
   });
 
   @override
@@ -470,30 +505,6 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  // Sample user's posted recipes implement later with database 
-  final List<Map<String, dynamic>> _postedRecipes = [
-    {
-      'name': 'Salmon Dish',
-      'imageUrl': 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=400',
-      'hashtags': ['#omega3', '#paleo'],
-    },
-    {
-      'name': 'Green Smoothie',
-      'imageUrl': 'https://images.unsplash.com/photo-1590301157890-4810ed352733?w=400',
-      'hashtags': ['#vegan', '#breakfast'],
-    },
-    {
-      'name': 'Pasta Bowl',
-      'imageUrl': 'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400',
-      'hashtags': ['#italian', '#vegetarian'],
-    },
-    {
-      'name': 'Avocado Toast',
-      'imageUrl': 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=400',
-      'hashtags': ['#healthy', '#vegetarian'],
-    },
-  ];
 
   @override
   void initState() {
@@ -522,13 +533,13 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               child: const Text('No'),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); 
-                // Navigate to the welcome page
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await FirebaseAuth.instance.signOut(); // Firebase sign out
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (_) => const WelcomePageWrapper()),
-                  (route) => false, 
+                  (route) => false,
                 );
               },
               style: TextButton.styleFrom(
@@ -544,6 +555,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+     final user = FirebaseAuth.instance.currentUser; //Current Firebase user
     return Scaffold(
       appBar: AppBar(
         title: const Text("Your Profile"),
@@ -606,26 +618,72 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
           ),
           const SizedBox(height: 15),
           // User Name
+          // AUTH INFO (FirebaseAuth)
           Text(
-            widget.userName,
+            user?.email ?? 'No email',
             style: const TextStyle(
-              fontSize: 22,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
           ),
-          const SizedBox(height: 10),
-          // Stats Row
+          
+          const SizedBox(height: 20),
+
+          //  FIRESTORE PROFILE DETAILS
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const CircularProgressIndicator();
+              }
+              final data = snapshot.data!.data();
+              if (data == null) {
+                return const Text('No profile data found');
+              }
+
+              return Column(
+                children: [
+                  Text('First name: ${data['firstName'] ?? ''}'),
+                  Text('Last name: ${data['lastName'] ?? ''}'),
+                  Text('Phone: ${data['phone'] ?? ''}'),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          //  Stats Row (Posts, Followers, Following)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildStatColumn('Posts', '${_postedRecipes.length}'),
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('recipes')
+                    .where('createdBy',
+                        isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return _buildStatColumn('Posts', '0');
+                  }
+                  final count = snapshot.data!.docs.length;
+                  return _buildStatColumn('Posts', '$count');
+                },
+              ),
+
               _buildStatColumn('Followers', '0'),
               _buildStatColumn('Following', '0'),
             ],
           ),
+
           const SizedBox(height: 20),
-          // TabBar for Posts, Saved and Favorites
+
+          //  TabBar for Posts, Saved and Favorites
           TabBar(
             controller: _tabController,
             labelColor: const Color(0xFF5aa454),
@@ -637,14 +695,35 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               Tab(icon: Icon(Icons.favorite), text: 'Favorites'),
             ],
           ),
-          // TabBar with grid of recipes
+
+          //  TabBarView with recipe grids
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildRecipeGrid(_postedRecipes),
-                _buildRecipeGrid(widget.bookmarkedRecipes.toList()),
-                _buildRecipeGrid(widget.favoriteRecipes.toList()),
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('recipes')
+                      .where('createdBy',
+                          isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final recipes = snapshot.data!.docs
+                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .toList();
+
+                    return _buildRecipeGrid(recipes);                  
+                  },
+                ),
+                // Saved tab
+              _buildRecipeGrid(widget.bookmarkedRecipes.toList()), 
+              // Favorites tab
+              _buildRecipeGrid(widget.favoriteRecipes.toList()), 
+
               ],
             ),
           ),
@@ -653,9 +732,12 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
+
   void _showSettingsMenu(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -674,6 +756,48 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
+              
+              ExpansionTile(
+              leading: const Icon(Icons.info, color: Color(0xFF5aa454)),
+              title: const Text('Profile Info'),
+              children: [
+                ListTile(
+                  title: Text('Email: ${user?.email ?? ''}'),
+                ),
+                ListTile(
+                  title: Text('UID: ${user?.uid ?? ''}'),
+                ),
+                ListTile(
+                  title: Text('Created: ${user?.metadata.creationTime}'),
+                ),
+                ListTile(
+                  title: Text('Last login: ${user?.metadata.lastSignInTime}'),
+                ),
+                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const ListTile(title: Text('Loading...'));
+                    }
+                    final data = snapshot.data!.data();
+                    if (data == null) {
+                      return const ListTile(title: Text('No profile data found'));
+                    }
+                    return Column(
+                      children: [
+                        ListTile(title: Text('First name: ${data['firstName'] ?? ''}')),
+                        ListTile(title: Text('Last name: ${data['lastName'] ?? ''}')),
+                        ListTile(title: Text('Phone: ${data['phone'] ?? ''}')),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+
               ListTile(
                 leading: const Icon(Icons.settings, color: Color(0xFF5aa454)),
                 title: const Text('Account Settings'),
@@ -745,7 +869,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildRecipeGrid(List<Map<String, dynamic>> recipes) {
+  Widget _buildRecipeGrid(List<Recipe> recipes){
     if (recipes.isEmpty) {
       return Center(
         child: Column(
@@ -784,7 +908,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               color: Colors.grey[300],
             ),
             child: Image.network(
-              recipe['imageUrl'],
+              recipe.imageUrl,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
                 return Container(
@@ -813,7 +937,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
-  void _showRecipeDetail(Map<String, dynamic> recipe) {
+  void _showRecipeDetail(Recipe recipe) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -828,7 +952,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 width: double.infinity,
                 height: 250,
                 child: Image.network(
-                  recipe['imageUrl'],
+                  recipe.imageUrl,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
@@ -846,7 +970,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      recipe['name'],
+                      recipe.name,
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -856,7 +980,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children: (recipe['hashtags'] as List<String>).map((tag) {
+                      children: (recipe.hashtags as List<String>).map((tag) {
                         return Text(
                           tag,
                           style: TextStyle(
@@ -892,144 +1016,186 @@ class UserRecipesPage extends StatefulWidget {
 }
 
 class _UserRecipesPageState extends State<UserRecipesPage> {
-  final List<Map<String, dynamic>> _userRecipes = [
-    {
-      'name': 'Hummus',
-      'ingredients': 'Chickpeas, Tahini, Olive Oil',
-      'rating': 4.5,
-      'ratingCount': 12,
-      'isShared': true,
-    },
-  ];
 
-  void _addRecipe(String name, String ingredients) {
-    setState(() {
-      _userRecipes.add({
-        'name': name,
-        'ingredients': ingredients,
-        'rating': 0.0,
-        'ratingCount': 0,
-        'isShared': false,
-      });
+  Future<void> _addRecipe(String name, String ingredients) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    await FirebaseFirestore.instance.collection('recipes').add({
+      'name': name,
+      'ingredients': ingredients.split(',').map((i) => i.trim()).toList(),
+      'rating': 0.0,
+      'ratingCount': 0,
+      'isShared': false,
+      'createdBy': user.uid,
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
-  void _toggleShare(int index) {
-    setState(() {
-      _userRecipes[index]['isShared'] = !_userRecipes[index]['isShared'];
-    });
+
+  Future<void> _toggleShare(String docId, bool currentValue) async {
+    await FirebaseFirestore.instance
+        .collection('recipes')
+        .doc(docId)
+        .update({'isShared': !currentValue});
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_userRecipes[index]['isShared'] 
-            ? 'Recipe shared with community!' 
+        content: Text(!currentValue
+            ? 'Recipe shared with community!'
             : 'Recipe made private'),
         backgroundColor: const Color(0xFF5aa454),
       ),
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Your Recipes"),
-        backgroundColor: const Color(0xFF5aa454),
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _userRecipes.length,
-        itemBuilder: (context, index) {
-          final recipe = _userRecipes[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            child: ListTile(
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      recipe['name'] ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                  ),
-                  if (recipe['isShared'])
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green[100],
-                        borderRadius: BorderRadius.circular(12),
+  final user = FirebaseAuth.instance.currentUser;
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text("Your Recipes"),
+      backgroundColor: const Color(0xFF5aa454),
+    ),
+    body: StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('recipes')
+          .where('createdBy', isEqualTo: user?.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final recipes = snapshot.data!.docs;
+
+        if (recipes.isEmpty) {
+          return const Center(
+            child: Text(
+              'No recipes yet. Add one!',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: recipes.length,
+          itemBuilder: (context, index) {
+            final doc = recipes[index];
+            final recipe = doc.data() as Map<String, dynamic>;
+
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: ListTile(
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        recipe['name'] ?? '',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.public, size: 14, color: Colors.green),
-                          SizedBox(width: 4),
-                          Text('Shared', style: TextStyle(fontSize: 12, color: Colors.green)),
+                    ),
+                    if (recipe['isShared'])
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.green[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.public, size: 14, color: Colors.green),
+                            SizedBox(width: 4),
+                            Text(
+                              'Shared',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.green),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Text("Ingredients: ${recipe['ingredients'] ?? ''}"),
+                    if (recipe['ratingCount'] > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.star,
+                              size: 16, color: Colors.amber),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${recipe['rating'].toStringAsFixed(1)} '
+                            '(${recipe['ratingCount']} ratings)',
+                            style: const TextStyle(fontSize: 13),
+                          ),
                         ],
                       ),
-                    ),
-                ],
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 4),
-                  Text("Ingredients: ${recipe['ingredients'] ?? ''}"),
-                  if (recipe['ratingCount'] > 0) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.star, size: 16, color: Colors.amber),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${recipe['rating'].toStringAsFixed(1)} (${recipe['ratingCount']} ratings)',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ],
-                    ),
+                    ],
                   ],
-                ],
-              ),
-              trailing: IconButton(
-                icon: Icon(
-                  recipe['isShared'] ? Icons.public : Icons.lock,
-                  color: recipe['isShared'] ? Colors.green : Colors.grey,
                 ),
-                onPressed: () => _toggleShare(index),
-                tooltip: recipe['isShared'] ? 'Make private' : 'Share with community',
+                trailing: IconButton(
+                  icon: Icon(
+                    recipe['isShared'] ? Icons.public : Icons.lock,
+                    color:
+                        recipe['isShared'] ? Colors.green : Colors.grey,
+                  ),
+                  onPressed: () => _toggleShare(
+                    doc.id,
+                    recipe['isShared'] as bool,
+                  ),
+                  tooltip: recipe['isShared']
+                      ? 'Make private'
+                      : 'Share with community',
+                ),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Recipe details coming soon!')),
+                  );
+                },
               ),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Recipe details coming soon!')),
-                );
-              },
-            ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddRecipePage(onAddRecipe: _addRecipe),
-            ),
-          );
-        },
-        backgroundColor: const Color(0xFF5aa454),
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+            );
+          },
+        );
+      },
+    ), // 👈 close StreamBuilder properly here
+    floatingActionButton: FloatingActionButton(
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AddRecipePage(onAddRecipe: _addRecipe),
+          ),
+        );
+      },
+      backgroundColor: const Color(0xFF5aa454),
+      child: const Icon(Icons.add),
+    ),
+  );
+}
 }
 
 class AddRecipePage extends StatefulWidget {
-  final Function(String name, String ingredients) onAddRecipe;
+  final Future<void> Function(String name, String ingredients) onAddRecipe;
 
   const AddRecipePage({super.key, required this.onAddRecipe});
 
   @override
   State<AddRecipePage> createState() => _AddRecipePageState();
 }
+
 
 class _AddRecipePageState extends State<AddRecipePage> {
   final _formKey = GlobalKey<FormState>();
@@ -1043,22 +1209,26 @@ class _AddRecipePageState extends State<AddRecipePage> {
     super.dispose();
   }
 
-  void _submitRecipe() {
-    if (_formKey.currentState!.validate()) {
-      widget.onAddRecipe(
-        _recipeNameController.text.trim(),
-        _ingredientsController.text.trim(),
-      );
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Recipe added successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
+  Future<void> _submitRecipe() async {
+  if (_formKey.currentState!.validate()) {
+    //  Call the callback you passed in from UserRecipesPage
+    await widget.onAddRecipe(
+      _recipeNameController.text.trim(),
+      _ingredientsController.text.trim(),
+    );
 
+    // Close the AddRecipePage
+    Navigator.pop(context);
+
+    // Show confirmation
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Recipe added successfully!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1149,21 +1319,33 @@ class SavedRecipesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       appBar: AppBar(
         title: const Text("Saved Recipes"),
         backgroundColor: const Color(0xFF5aa454),
       ),
-      body: savedRecipes.isEmpty
-          ? const Center(
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .collection('saved')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final meals = snapshot.data!.docs
+            .map((doc) => Meal.fromMap(doc.data() as Map<String, dynamic>))
+            .toList();
+
+          if (savedRecipes.isEmpty) {
+            return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.favorite_border,
-                    size: 80,
-                    color: Colors.grey,
-                  ),
+                  Icon(Icons.favorite_border, size: 80, color: Colors.grey),
                   SizedBox(height: 20),
                   Text(
                     'No saved recipes yet',
@@ -1184,8 +1366,10 @@ class SavedRecipesPage extends StatelessWidget {
                   ),
                 ],
               ),
-            )
-          : ListView.builder(
+            );
+          }
+
+          return ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: savedRecipes.length,
               itemBuilder: (context, index) {
@@ -1272,14 +1456,17 @@ class SavedRecipesPage extends StatelessWidget {
                               onPressed: () => Navigator.pop(context),
                               child: const Text('Close'),
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
+
