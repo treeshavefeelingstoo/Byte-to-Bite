@@ -11,6 +11,11 @@ class Recipe {
   bool isFavorite;
   bool isBookmarked;
 
+  // added for comments
+  List<Map<String, String>> comments;
+  bool showComments;
+  TextEditingController commentController;
+
   Recipe({
     required this.name,
     required this.imageUrl,
@@ -20,7 +25,14 @@ class Recipe {
     this.ratingCount = 0,
     this.isFavorite = false,
     this.isBookmarked = false,
-  });
+
+    // added for comments
+    List<Map<String, String>>? comments,
+    bool? showComments,
+    TextEditingController? commentController,
+  })  : comments = comments ?? [],
+        showComments = showComments ?? false,
+        commentController = commentController ?? TextEditingController();
 }
 
 class RecipeFeedPage extends StatefulWidget {
@@ -46,7 +58,7 @@ class RecipeFeedPage extends StatefulWidget {
 class _RecipeFeedPageState extends State<RecipeFeedPage> {
   String _selectedFeed = 'Featured'; 
   
-  // Sample recipe data this will come from database later 
+  // Sample recipe data
   final List<Recipe> recipes = [
     Recipe(
       name: 'Vegan Bowl',
@@ -139,7 +151,6 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
   @override
   void initState() {
     super.initState();
-    // Initialize favorites and bookmarks 
     if (widget.favoriteRecipeNames != null || widget.bookmarkedRecipeNames != null) {
       for (var recipe in recipes) {
         recipe.isFavorite = widget.favoriteRecipeNames?.contains(recipe.name) ?? false;
@@ -195,7 +206,6 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
                   onPressed: userRating > 0
                       ? () {
                           setState(() {
-                            // Calculate new average rating
                             final totalRating = (recipe.rating * recipe.ratingCount) + userRating;
                             recipe.ratingCount++;
                             recipe.rating = totalRating / recipe.ratingCount;
@@ -360,7 +370,6 @@ Download Byte to Bite to see the full recipe!
           IconButton(
             icon: const Icon(Icons.add_box_outlined, color: Colors.white, size: 28),
             onPressed: () {
-              // Add new recipe functionality
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Add new recipe coming soon!')),
               );
@@ -370,7 +379,6 @@ Download Byte to Bite to see the full recipe!
       ),
       body: Column(
         children: [
-          // Dropdown menu bar
           Container(
             width: double.infinity,
             color: Colors.white,
@@ -397,7 +405,7 @@ Download Byte to Bite to see the full recipe!
             ),
           ),
           const Divider(height: 1, thickness: 1),
-          // Recipe feed
+
           Expanded(
             child: ListView.builder(
               itemCount: _currentRecipes.length,
@@ -420,7 +428,6 @@ Download Byte to Bite to see the full recipe!
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with author info
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Row(
@@ -445,7 +452,7 @@ Download Byte to Bite to see the full recipe!
               ],
             ),
           ),
-          // Recipe image
+
           Container(
             width: double.infinity,
             height: 300,
@@ -475,7 +482,7 @@ Download Byte to Bite to see the full recipe!
               },
             ),
           ),
-          // buttons
+
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             child: Row(
@@ -490,12 +497,11 @@ Download Byte to Bite to see the full recipe!
                     setState(() {
                       recipe.isFavorite = !recipe.isFavorite;
                     });
-                    
-                    // Call the callback to update favorites in main app
+
                     if (widget.onToggleFavorite != null) {
                       widget.onToggleFavorite!(recipe);
                     }
-                    
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(recipe.isFavorite ? 'Added to favorites!' : 'Removed from favorites'),
@@ -504,18 +510,17 @@ Download Byte to Bite to see the full recipe!
                     );
                   },
                 ),
+
+                // ⭐ COMMENT BUTTON UPDATED
                 IconButton(
                   icon: const Icon(Icons.chat_bubble_outline, size: 28),
                   onPressed: () {
-                    // jaislen implement Comment section here 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Comments coming soon!'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
+                    setState(() {
+                      recipe.showComments = !recipe.showComments;
+                    });
                   },
                 ),
+
                 IconButton(
                   icon: const Icon(Icons.star_border, size: 28),
                   onPressed: () => _showRatingDialog(recipe),
@@ -535,12 +540,11 @@ Download Byte to Bite to see the full recipe!
                     setState(() {
                       recipe.isBookmarked = !recipe.isBookmarked;
                     });
-                    
-                    // Call the callback to update bookmarks in main app
+
                     if (widget.onToggleBookmark != null) {
                       widget.onToggleBookmark!(recipe);
                     }
-                    
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(recipe.isBookmarked ? 'Recipe saved!' : 'Recipe removed from saved'),
@@ -552,7 +556,10 @@ Download Byte to Bite to see the full recipe!
               ],
             ),
           ),
-          // Recipe name and rating
+
+          // ⭐ SHOW COMMENTS INLINE
+          if (recipe.showComments) _buildInlineComments(recipe),
+
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Column(
@@ -566,7 +573,7 @@ Download Byte to Bite to see the full recipe!
                   ),
                 ),
                 const SizedBox(height: 4),
-                // Rating display
+
                 if (recipe.ratingCount > 0)
                   Row(
                     children: [
@@ -582,7 +589,7 @@ Download Byte to Bite to see the full recipe!
                     ],
                   ),
                 const SizedBox(height: 8),
-                // Hashtags for dietary restrictions
+
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
@@ -600,6 +607,87 @@ Download Byte to Bite to see the full recipe!
                 const SizedBox(height: 12),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ⭐ COMMENTS
+  Widget _buildInlineComments(Recipe recipe) {
+    final controller = recipe.commentController;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Comments",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+
+          if (recipe.comments.isEmpty)
+            const Text("No comments yet.", style: TextStyle(color: Colors.grey)),
+
+          if (recipe.comments.isNotEmpty)
+            Column(
+              children: recipe.comments.map((c) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: const Color(0xFF479E36),
+                        child: Text(
+                          c["user"]![0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(c["text"]!)),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    hintText: "Write a comment...",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.send, color: Color(0xFF479E36)),
+                onPressed: () {
+                  final text = controller.text.trim();
+                  if (text.isEmpty) return;
+
+                  setState(() {
+                    recipe.comments.add({
+                      "user": widget.userName,
+                      "text": text,
+                    });
+                  });
+
+                  controller.clear();
+                },
+              ),
+            ],
           ),
         ],
       ),
