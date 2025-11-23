@@ -251,8 +251,8 @@ class GroceryPage extends StatelessWidget {
                                 TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
                                 ElevatedButton(
                                   onPressed: () async {
-                                    await repo.deleteWeek(uid: user.uid, weekStart: weekStart);
                                     Navigator.pop(context);
+                                    await repo.deleteWeek(uid: user.uid, weekStart: weekStart);
                                   },
                                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                                   child: const Text("Delete", style: TextStyle(color: Colors.white)),
@@ -785,6 +785,11 @@ Future<void> seedExampleRecipes() async {
   ];
 
   for (final recipe in recipes) {
-    await FirebaseFirestore.instance.collection('recipes').add(recipe);
+    final docId = (recipe['name'] as String).toLowerCase().replaceAll(' ', '_');
+    await FirebaseFirestore.instance
+        .collection('recipes')
+        .doc(docId)
+        .set(recipe, SetOptions(merge: true));
   }
+
 }
