@@ -25,7 +25,7 @@ git checkout dev
 ## Navigate into project directory
 cd byte_to_bite
 
-##Start Android emulator
+## Start Android emulator
 flutter emulator --launch <device_name>
 
 # Run the app
