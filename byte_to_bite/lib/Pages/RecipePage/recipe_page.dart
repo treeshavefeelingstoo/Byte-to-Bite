@@ -1342,11 +1342,11 @@ class _IngredientSubstitutionPageState extends State<IngredientSubstitutionPage>
 
   void _applySubstitution(int index, String original, String substitute) {
     setState(() {
-      // Try to intelligently replace the ingredient
+      // replace the ingredient
       final originalLower = original.toLowerCase();
       String modified = original;
 
-      // Find the key ingredient in the original string and replace it
+      // Find the key ingredient and replace it
       for (var key in substitutionOptions.keys) {
         if (originalLower.contains(key)) {
           final regex = RegExp(key, caseSensitive: false);
