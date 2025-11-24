@@ -20,10 +20,17 @@ Instead of spending time digging for recipes or figuring out what fits your diet
       ### https://github.com/treeshavefeelingstoo/Byte-to-Bite
    2. Switch to development branch
       ### git checkout dev
-   3. Navigate into project directory
+   4. Navigate into project directory
       ### cd byte_to_bite
-   4. Start Android emulator
+   5. Install Dependcies
+      ### flutter pub get
+   7. Start Android emulator
       ### flutter emulator --launch <device_name>
-   5. Run the app
+   8. Run the app
       ### flutter run
-  
+# Emulator Troubleshooting Steps
+If you encounter any errors while running the emulator, try the following steps:
+
+Run flutter clean – This clears out old build artifacts that may be causing issues
+Run flutter pub get – This reinstalls your project dependencies and ensures everything is up to date.
+
