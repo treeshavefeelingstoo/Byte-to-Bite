@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,10 +31,21 @@ class Meal {
     Color color;
     IconData icon;
     switch (type.toLowerCase()) {
-      case 'breakfast': color = Colors.purple; icon = Icons.free_breakfast; break;
-      case 'lunch': color = Colors.red; icon = Icons.lunch_dining; break;
-      case 'dinner': color = Colors.blue; icon = Icons.dinner_dining; break;
-      default: color = Colors.grey; icon = Icons.restaurant;
+      case 'breakfast':
+        color = Colors.purple;
+        icon = Icons.free_breakfast;
+        break;
+      case 'lunch':
+        color = Colors.red;
+        icon = Icons.lunch_dining;
+        break;
+      case 'dinner':
+        color = Colors.blue;
+        icon = Icons.dinner_dining;
+        break;
+      default:
+        color = Colors.grey;
+        icon = Icons.restaurant;
     }
     return Meal(
       m['name'] as String,
@@ -77,46 +87,38 @@ class MealPlanRepo {
           final meals = (mealsList as List<dynamic>)
               .map((e) => Meal.fromMap(Map<String, dynamic>.from(e)))
               .toList();
-          //  Use normalized DateTime as the key in the map
           map[normalized] = meals;
         });
-
       }
       return map;
     });
   }
 
   Future<void> addMeal({
-  required DateTime date,
-  required Meal meal,
-  required String mealType,
-}) async {
-  final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid == null) {
-    throw Exception("User not signed in");
-  }
+    required DateTime date,
+    required Meal meal,
+    required String mealType,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      throw Exception("User not signed in");
+    }
 
-  final dayKey = normalizeDate(date).toIso8601String(); // e.g. 
-  final weekStart = weekStartOf(date);
-  final weekKey = isoWeek(date);  // e.g. "2025-W47"
-
-  final docRef = FirebaseFirestore.instance
-      .collection('mealPlans')
-      .doc(mealPlanDocId(uid, weekStart));
-
-  await docRef.set({
-    'userId': uid,
-    'weekStart': weekKey,
-    'days': {
-      dayKey: FieldValue.arrayUnion([
-        {...meal.toMap(), 'mealType': mealType},
-      ]),
-    },
-  }, SetOptions(merge: true));
+    final dayKey = normalizeDate(date).toIso8601String(); 
+    final weekStart = weekStartOf(date);
 
   //print("Saved meal for $dayKey under doc ${docRef.id}");
 
-}
+    await docRef.set({
+      'userId': uid,
+      'weekStart': isoWeek(weekStart),
+      'days': {
+        dayKey: FieldValue.arrayUnion([
+          {...meal.toMap(), 'mealType': mealType},
+        ]),
+      },
+    }, SetOptions(merge: true));
+  }
 
   Future<void> deleteMeal({
     required String uid,
@@ -132,22 +134,39 @@ class MealPlanRepo {
   }
 
   Future<void> addGroceries({
-  required DateTime date,
-  required List<String> ingredients,
-}) async {
-  final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid == null) throw Exception("User not signed in");
+    required DateTime date,
+    required List<String> ingredients,
+    String listName = '', 
+    bool initialIsManual = false,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) throw Exception("User not signed in");
 
-  final weekKey = isoWeek(date);
-  final docRef = _db.collection('groceries').doc(groceriesDocId(uid, date));
+    final weekKey = isoWeek(date);
+    final docRef = _db.collection('groceries').doc(groceriesDocId(uid, date));
 
-  await docRef.set({
-    'userId': uid,
-    'weekStart': weekKey,
-    'items': FieldValue.arrayUnion(ingredients),
-  }, SetOptions(merge: true));
-}
+    await docRef.set({
+      'userId': uid,
+      'weekStart': weekKey,
+      'items': FieldValue.arrayUnion(ingredients),
+      'listName': listName, 
+      'isManual': initialIsManual,
+    }, SetOptions(merge: true));
+  }
+  
+  Future<void> addGroceryItem({
+    required DateTime weekStart,
+    required String item,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) throw Exception("User not signed in");
 
+    final docRef = _db.collection('groceries').doc(groceriesDocId(uid, weekStart));
+
+    await docRef.update({
+      'items': FieldValue.arrayUnion([item]),
+    });
+  }
 
   Stream<Map<String, dynamic>> streamGroceriesDoc(String uid, DateTime weekStart) {
     return _db.collection('groceries').doc(groceriesDocId(uid, weekStart)).snapshots().map((doc) {
@@ -157,6 +176,8 @@ class MealPlanRepo {
           'checked': <String, bool>{},
           'userId': uid,
           'weekStart': isoWeek(weekStart),
+          'listName': null,
+          'isManual': false,
         };
       }
       final data = doc.data()!;
@@ -165,6 +186,8 @@ class MealPlanRepo {
         'checked': Map<String, bool>.from(data['checked'] ?? const {}),
         'userId': data['userId'] ?? uid,
         'weekStart': data['weekStart'] ?? isoWeek(weekStart),
+        'isManual': data['isManual'] ?? false, 
+        'listName': data['listName'] as String?, 
       };
     });
   }
@@ -178,24 +201,359 @@ class MealPlanRepo {
     final docRef = _db.collection('groceries').doc(groceriesDocId(uid, weekStart));
     await docRef.set({
       'checked': {item: newValue},
-      'userId': uid,
-      'weekStart': isoWeek(weekStart),
     }, SetOptions(merge: true));
   }
 
-  Future<void> deleteWeek({
+  Future<void> deleteGroceryItem({
+    required String uid,
+    required DateTime weekStart,
+    required String item,
+  }) async {
+    final docRef = _db.collection('groceries').doc(groceriesDocId(uid, weekStart));
+
+    await docRef.update({
+      'items': FieldValue.arrayRemove([item]),
+    });
+
+    await docRef.set({
+      'checked': {item: FieldValue.delete()},
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> editGroceryItem({
+    required String uid,
+    required DateTime weekStart,
+    required String oldItem,
+    required String newItem,
+  }) async {
+    final docRef = _db.collection('groceries').doc(groceriesDocId(uid, weekStart));
+    await docRef.update({
+      'items': FieldValue.arrayRemove([oldItem]),
+    });
+
+    await docRef.update({
+      'items': FieldValue.arrayUnion([newItem]),
+    });
+
+    final docSnapshot = await docRef.get();
+    final data = docSnapshot.data();
+    final checkedMap = Map<String, bool>.from(data?['checked'] ?? const {});
+    final wasChecked = checkedMap[oldItem] ?? false;
+
+     await docRef.set({
+      'checked': {oldItem: FieldValue.delete()},
+    }, SetOptions(merge: true));
+
+    if (wasChecked) {
+      await docRef.set({
+        'checked': {newItem: true},
+      }, SetOptions(merge: true));
+    }
+  }
+
+  Future<void> hardDeleteWeek({
     required String uid,
     required DateTime weekStart,
   }) async {
     await _db.collection('groceries').doc(groceriesDocId(uid, weekStart)).delete();
-    await _db.collection('mealPlans').doc(mealPlanDocId(uid, weekStart)).delete();
   }
 }
-
+//////////  GroceryPage 
 class GroceryPage extends StatelessWidget {
   final VoidCallback onBackToMealPrep;
 
   const GroceryPage({super.key, required this.onBackToMealPrep});
+
+  Future<void> _showAddItemDialog(
+    BuildContext context,
+    MealPlanRepo repo,
+    DateTime weekStart,
+  ) async {
+    final TextEditingController controller = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text("Add New Item"),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: "Enter item name"),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newItem = controller.text.trim();
+                if (newItem.isNotEmpty) {
+                  Navigator.of(dialogContext).pop();
+                  try {
+                    await repo.addGroceryItem(weekStart: weekStart, item: newItem);
+                    if (context.mounted) {
+                       ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Added '$newItem'")),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                       ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Error adding item: $e")),
+                      );
+                    }
+                  }
+                } else {
+                  Navigator.of(dialogContext).pop();
+                }
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  Future<void> _showItemOptions(
+    BuildContext context,
+    MealPlanRepo repo,
+    String uid,
+    DateTime weekStart,
+    String item,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text("Manage '$item'"),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                ListTile(
+                  leading: const Icon(Icons.edit),
+                  title: const Text('Edit Item'),
+                  onTap: () {
+                    Navigator.pop(dialogContext);
+                    _showEditDialog(context, repo, uid, weekStart, item);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text('Delete Item'),
+                  onTap: () {
+                    Navigator.pop(dialogContext);
+                    _showDeleteConfirmation(context, repo, uid, weekStart, item);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showDeleteConfirmation(
+    BuildContext context,
+    MealPlanRepo repo,
+    String uid,
+    DateTime weekStart,
+    String item,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) { 
+        return AlertDialog(
+          title: const Text("Confirm Deletion"),
+          content: Text("Are you sure you want to delete '$item' from the list?"),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  await repo.deleteGroceryItem(uid: uid, weekStart: weekStart, item: item);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Deleted '$item'")),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Error deleting item: $e")),
+                    );
+                  }
+                }
+              },
+              child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showEditDialog(
+    BuildContext context,
+    MealPlanRepo repo,
+    String uid,
+    DateTime weekStart,
+    String oldItem,
+  ) async {
+    final TextEditingController controller = TextEditingController(text: oldItem);
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) { 
+        return AlertDialog(
+          title: const Text("Edit Grocery Item"),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: "Enter new item name"),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newItem = controller.text.trim();
+                if (newItem.isNotEmpty && newItem != oldItem) {
+                  Navigator.of(dialogContext).pop();
+                  try {
+                    await repo.editGroceryItem(
+                        uid: uid, weekStart: weekStart, oldItem: oldItem, newItem: newItem);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Edited '$oldItem' to '$newItem'")),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Error editing item: $e")),
+                      );
+                    }
+                  }
+                } else {
+                  Navigator.of(dialogContext).pop();
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showManualAddDialog(BuildContext context, String uid) async {
+    DateTime selectedDate = DateTime.now(); 
+    final nameController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) { 
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: const Text("Create Grocery List"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("List Name:"),
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: "Enter list name",
+                    ),
+                  ),
+                  const Divider(),
+                  ListTile(
+                    title: Text(
+                        "Week starting: ${weekStartOf(selectedDate).month}/${weekStartOf(selectedDate).day}/${weekStartOf(selectedDate).year}"),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2023),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null && picked != selectedDate) {
+                        setState(() {
+                          selectedDate = picked;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Cancel")),
+              ElevatedButton(
+                onPressed: () async {
+                  final listName = nameController.text.trim();
+                  
+                  if (listName.isEmpty) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a list name.')),
+                      );
+                    }
+                    return; 
+                  }
+                  
+                  const items = <String>[]; 
+
+                  Navigator.pop(dialogContext);
+                  
+                  await MealPlanRepo().addGroceries(
+                    date: selectedDate,
+                    ingredients: items, 
+                    listName: listName, 
+                    initialIsManual: true, 
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Empty grocery list created!')),
+                    );
+                  }
+                },
+                child: const Text("Create List"),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -219,103 +577,171 @@ class GroceryPage extends StatelessWidget {
         backgroundColor: const Color(0xFF5aa454),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBackToMealPrep),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('groceries')
-            .where('userId', isEqualTo: user.uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final docs = snapshot.data!.docs;
-          if (docs.isEmpty) {
-            return const Center(child: Text("No groceries yet. Add meals to populate weekly lists."));
-          }
-
-          final weeks = docs.map((d) => DateTime.parse(d['weekStart'] as String)).toList()..sort((a, b) => b.compareTo(a));
-          final now = DateTime.now();
-          final currentWeekStart = weekStartOf(now);
-
-          return ListView.builder(
-            itemCount: weeks.length,
-            itemBuilder: (context, index) {
-              final weekStart = weeks[index];
-              return StreamBuilder<Map<String, dynamic>>(
-                stream: repo.streamGroceriesDoc(user.uid, weekStart),
-                builder: (context, grocSnap) {
-                  if (!grocSnap.hasData) return const SizedBox.shrink();
-                  final data = grocSnap.data!;
-                  final items = List<String>.from(data['items'] ?? const [])..sort();
-                  final checkedMap = Map<String, bool>.from(data['checked'] ?? const {});
-                  final isCurrentWeek = weekStart.isAtSameMomentAs(currentWeekStart);
-                  final checkedCount = items.where((item) => checkedMap[item] ?? false).length;
-
-                  return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: ExpansionTile(
-                      initiallyExpanded: isCurrentWeek,
-                      title: Text("Week of ${weekStart.month}/${weekStart.day}/${weekStart.year}"),
-                      subtitle: Text(
-                        "$checkedCount/${items.length} completed",
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text("Delete Week"),
-                              content: Text(
-                                  "Delete all groceries and meals for the week of ${weekStart.month}/${weekStart.day}/${weekStart.year}?"),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    Navigator.pop(context);
-                                    await repo.deleteWeek(uid: user.uid, weekStart: weekStart);
-                                  },
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                  child: const Text("Delete", style: TextStyle(color: Colors.white)),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                      children: [
-                        for (final item in items)
-                          CheckboxListTile(
-                            value: checkedMap[item] ?? false,
-                            onChanged: (bool? newVal) async {
-                              await repo.toggleGroceryChecked(
-                                uid: user.uid,
-                                weekStart: weekStart,
-                                item: item,
-                                newValue: newVal ?? false,
-                              );
-                            },
-                            title: Text(
-                              item,
-                              style: TextStyle(
-                                decoration: (checkedMap[item] ?? false) ? TextDecoration.lineThrough : null,
-                                color: (checkedMap[item] ?? false) ? Colors.grey : Colors.black,
-                              ),
-                            ),
-                            activeColor: Colors.green,
-                          ),
-                      ],
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.add_shopping_cart, size: 18),
+                    label: const Text("Create My Grocery List"),
+                    onPressed: () => _showManualAddDialog(context, user.uid),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
                     ),
-                  );
-                },
-              );
-            },
-          );
-        },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('groceries')
+                  .where('userId', isEqualTo: user.uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) {
+                  return const Center(
+                      child: Text("No groceries yet. Add meals or create a new list."));
+                }
+
+                final weeks = docs.map((d) => DateTime.parse(d['weekStart'] as String)).toList()
+                  ..sort((a, b) => b.compareTo(a));
+                final now = DateTime.now();
+                final currentWeekStart = weekStartOf(now);
+
+                return ListView.builder(
+                  itemCount: weeks.length,
+                  itemBuilder: (context, index) {
+                    final weekStart = weeks[index];
+                    return StreamBuilder<Map<String, dynamic>>(
+                      stream: repo.streamGroceriesDoc(user.uid, weekStart),
+                      builder: (context, grocSnap) {
+                        if (!grocSnap.hasData) return const SizedBox.shrink();
+                        final data = grocSnap.data!;
+                        
+                        final items = List<String>.from(data['items'] ?? const [])..sort();
+                        final checkedMap = Map<String, bool>.from(data['checked'] ?? const {});
+                        final isCurrentWeek = weekStart.isAtSameMomentAs(currentWeekStart);
+                        final checkedCount = items.where((item) => checkedMap[item] ?? false).length;
+                        final isManual = data['isManual'] as bool? ?? false;
+                        final listName = data['listName'] as String?; 
+
+                        final title = listName != null && listName.isNotEmpty
+                            ? listName
+                            :"Week of ${weekStart.month}/${weekStart.day}/${weekStart.year}";
+
+
+                        return Card(
+                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: ExpansionTile(
+                            initiallyExpanded: isCurrentWeek,
+                            title: Text(title), 
+                            subtitle: listName != null && listName.isNotEmpty
+                                ? Text("Week of ${weekStart.month}/${weekStart.day}/${weekStart.year}")
+                                : null ,
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text("Delete List"),
+                                    content: Text(
+                                        "Are you sure you want to delete the list **$title**?"),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+                                      ElevatedButton(
+                                        onPressed: () async {
+                                          Navigator.pop(context);
+                                          await repo.hardDeleteWeek(uid: user.uid, weekStart: weekStart);
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Grocery list deleted.')),
+                                            );
+                                          }
+                                        },
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                        child: const Text("Delete ", style: TextStyle(color: Colors.white)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            children: [
+                              // Add New Item Button
+                              ListTile(
+                                leading: const Icon(Icons.add_circle, color: Colors.green),
+                                title: const Text("Add New Item"),
+                                onTap: () => _showAddItemDialog(context, repo, weekStart),
+                              ),
+                              const Divider(height: 1, indent: 16, endIndent: 16),
+                              // Grocery Items
+                              for (final item in items)
+                                ListTile(
+                                  leading: Checkbox(
+                                    value: checkedMap[item] ?? false,
+                                    onChanged: (bool? newVal) async {
+                                      await repo.toggleGroceryChecked(
+                                        uid: user.uid,
+                                        weekStart: weekStart,
+                                        item: item,
+                                        newValue: newVal ?? false,
+                                      );
+                                    },
+                                    activeColor: Colors.green,
+                                  ),
+                                  title: Text(
+                                    item,
+                                    style: TextStyle(
+                                      decoration: (checkedMap[item] ?? false) ? TextDecoration.lineThrough : null,
+                                      color: (checkedMap[item] ?? false) ? Colors.grey : Colors.black,
+                                    ),
+                                  ),
+                                  onTap: () {
+                                    repo.toggleGroceryChecked(
+                                      uid: user.uid,
+                                      weekStart: weekStart,
+                                      item: item,
+                                      newValue: !(checkedMap[item] ?? false),
+                                    );
+                                  },
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.more_vert),
+                                    onPressed: () => _showItemOptions(
+                                      context,
+                                      repo,
+                                      user.uid,
+                                      weekStart,
+                                      item,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+// MealPlannerPage 
 class MealPlannerPage extends StatefulWidget {
   final Set<String> excludedIngredients;
   final Set<Meal>? savedRecipes;
@@ -380,8 +806,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
       context,
       MaterialPageRoute(
         builder: (_) => RecipePage(
-        excludedIngredients: widget.excludedIngredients,
-        mealType: mealType, // pass selected mealType
+          excludedIngredients: widget.excludedIngredients,
+          mealType: mealType,
         ),
       ),
     );
@@ -393,9 +819,11 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
       }
       await repo.addMeal(date: date, meal: meal, mealType: mealType);
       await repo.addGroceries(date: date, ingredients: meal.ingredients);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Meal added to plan and groceries updated'), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Meal added to plan and groceries updated'), backgroundColor: Colors.green),
+        );
+      }
     }
   }
 
@@ -406,7 +834,6 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
   }
 
   void _showMeals(DateTime date, Map<DateTime, List<Meal>> mealPlan) {
-    final key = normalizeDate(date);
     final meals = mealPlan[normalizeDate(date)] ?? [];
 
     showDialog(
@@ -431,8 +858,10 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () async {
                             await _deleteMeal(date, meal);
-                            Navigator.pop(context);
-                            _showMeals(date, mealPlan);
+                            if (mounted) {
+                              Navigator.pop(context);
+                              _showMeals(date, mealPlan);
+                            }
                           },
                         ),
                       ),
@@ -494,10 +923,17 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                       children: meals.map((meal) {
                         Color dotColor;
                         switch (meal.mealType.toLowerCase()) {
-                          case 'breakfast': dotColor = Colors.purple; break;
-                          case 'lunch': dotColor = Colors.red; break;
-                          case 'dinner': dotColor = Colors.blue; break;
-                          default: dotColor = Colors.grey;
+                          case 'breakfast':
+                            dotColor = Colors.purple;
+                            break;
+                          case 'lunch':
+                            dotColor = Colors.red;
+                            break;
+                          case 'dinner':
+                            dotColor = Colors.blue;
+                            break;
+                          default:
+                            dotColor = Colors.grey;
                         }
                         return Container(
                           width: 6,
@@ -509,7 +945,6 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                         );
                       }).toList(),
                     ),
-
                 ],
               ),
             ),
@@ -549,10 +984,17 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                       children: meals.map((meal) {
                         Color dotColor;
                         switch (meal.mealType.toLowerCase()) {
-                          case 'breakfast': dotColor = Colors.purple; break;
-                          case 'lunch': dotColor = Colors.red; break;
-                          case 'dinner': dotColor = Colors.blue; break;
-                          default: dotColor = Colors.grey;
+                          case 'breakfast':
+                            dotColor = Colors.purple;
+                            break;
+                          case 'lunch':
+                            dotColor = Colors.red;
+                            break;
+                          case 'dinner':
+                            dotColor = Colors.blue;
+                            break;
+                          default:
+                            dotColor = Colors.grey;
                         }
                         return Container(
                           width: 6,
@@ -564,7 +1006,6 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                         );
                       }).toList(),
                     ),
-
                 ],
               ),
             ),
@@ -739,7 +1180,6 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
     );
   }
 }
-
 class RecipePage extends StatelessWidget {
   final Set<String> excludedIngredients;
   final String mealType;
@@ -763,9 +1203,7 @@ class RecipePage extends StatelessWidget {
       );
     }
 
-    final query = FirebaseFirestore.instance
-        .collection('recipes')
-        .snapshots();
+    final query = FirebaseFirestore.instance.collection('recipes').snapshots();
 
     return Scaffold(
       appBar: AppBar(
@@ -786,13 +1224,14 @@ class RecipePage extends StatelessWidget {
             final ingredients = List<String>.from(data['ingredients'] ?? const []);
             final blocked = ingredients.any((ing) => excludedIngredients.contains(ing));
             if (blocked) continue;
+
             meals.add(Meal(
               name,
               ingredients,
-              restrictions: const [],
+              restrictions: List<String>.from(data['restrictions'] ?? const []),
               color: Colors.green,
               icon: Icons.restaurant,
-              mealType: 'lunch',
+              mealType: this.mealType, 
             ));
           }
 
@@ -824,7 +1263,7 @@ Future<void> seedExampleRecipes() async {
       'name': 'Chicken Stir Fry',
       'ingredients': ['Chicken', 'Bell Pepper', 'Soy Sauce', 'Garlic'],
       'restrictions': ['Peanut Allergy Safe'],
-      'isShared': true, // mark as shared so RecipePage can find it
+      'isShared': true, 
     },
     {
       'name': 'Veggie Pasta',
@@ -859,5 +1298,4 @@ Future<void> seedExampleRecipes() async {
         .doc(docId)
         .set(recipe, SetOptions(merge: true));
   }
-
 }
