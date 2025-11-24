@@ -1,3 +1,33 @@
 # Byte-to-Bite
-CSC 4330 Project Github - Meal Planning app with a focus on dietary restrictions, user recipes &amp; a recipe-to-store flow.
-\n// Code Specs will go here when I finish them
+CSC 4330 Project Github - Byte-to-bite is a meal Planning app with a focus on dietary restrictions, user recipes &amp; a recipe-to-store flow. Byte-to-Bite is a simple, easy-to-use meal prep and recipe app that helps you plan what to eat without all the stress. Whether you're dealing with allergies, trying to stay on track with certain dietary needs, or just wanting quick meal ideas, the app makes finding and organizing meals way easier.
+
+Instead of spending time digging for recipes or figuring out what fits your diet, Byte-to-Bite helps by offering personalized meal ideas, easy recipe browsing, and automatically turning your picks into a clean, ready-to-use grocery list. Users can also view their planned meals on a calendar, making it easy to stay organized throughout the month.
+
+# Creators
+- Lexi Reed
+- Jaislen Nolasco
+- Raegan Stair
+- London Banner
+- Khalil El-Abbassi
+
+# Made with 
+- flutter
+- Dart
+- Firebase
+
+# Installation Steps
+## Clone the repository
+https://github.com/treeshavefeelingstoo/Byte-to-Bite
+
+## Switch to development branch
+git checkout dev
+
+## Navigate into project directory
+cd byte_to_bite
+
+##Start Android emulator
+flutter emulator --launch <device_name>
+
+# Run the app
+flutter run
+  
