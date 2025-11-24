@@ -127,6 +127,7 @@ class _AddRecipePageState extends State<AddRecipePage> {
         'hashtags': hashtags,
         'ingredients': ingredients,
         'author': firstName,
+        'authorId': user.uid,
         'createdBy': user.uid,
         'createdAt': FieldValue.serverTimestamp(),
         'isArchived': false,

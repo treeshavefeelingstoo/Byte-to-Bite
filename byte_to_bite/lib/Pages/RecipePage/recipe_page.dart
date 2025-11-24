@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:io';
 import 'add_recipe_page.dart';
 
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
@@ -13,6 +14,7 @@ class Recipe {
   final List<String> hashtags;
   final List<String> ingredients;
   final String author;
+  final String? authorId;
   double rating;
   int ratingCount;
   bool isFavorite;
@@ -36,6 +38,7 @@ class Recipe {
     required this.hashtags,
     this.ingredients = const [],
     required this.author,
+    this.authorId,
     this.rating = 0.0,
     this.ratingCount = 0,
     this.isFavorite = false,
@@ -54,6 +57,7 @@ class Recipe {
       hashtags: List<String>.from(data['hashtags'] ?? []),
       ingredients: List<String>.from(data['ingredients'] ?? []),
       author: data['author'] ?? '',
+      authorId: data['authorId'] ?? data['createdBy'],
       rating: (data['rating'] ?? 0.0).toDouble(),
       ratingCount: data['ratingCount'] ?? 0,
       isFavorite: data['isFavorite'] ?? false,
@@ -72,6 +76,7 @@ class Recipe {
       'hashtags': hashtags,
       'ingredients': ingredients,
       'author': author,
+      'authorId': authorId,
       'rating': rating,
       'ratingCount': ratingCount,
       'isFavorite': isFavorite,
@@ -880,17 +885,25 @@ Download Byte to Bite to see the full recipe.
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const AuthorPage()),
+                      MaterialPageRoute(
+                        builder: (context) => AuthorPage(
+                          authorName: recipe.author,
+                          authorId: recipe.authorId,
+                        ),
+                      ),
                     );
                   },
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: Text(
                     recipe.author,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      color: Colors.black,
                     ),
                   ),
                 ),
