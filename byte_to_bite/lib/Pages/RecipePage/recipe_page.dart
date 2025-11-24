@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
 class Recipe {
   final String name;
   final String imageUrl;
@@ -96,6 +96,8 @@ class RecipeFeedPage extends StatefulWidget {
 
 class _RecipeFeedPageState extends State<RecipeFeedPage> {
   String _selectedFeed = 'Featured';
+
+  late Stream<Map<DateTime, List<Meal>>> mealPlanStream;
 
   // Featured recipes
   final List<Recipe> recipes = [
@@ -191,6 +193,30 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
   void initState() {
     super.initState();
     _loadFavoritesAndBookmarks();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid != null) {
+    mealPlanStream = FirebaseFirestore.instance
+        .collection('mealPlans')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((snapshot) {
+          final map = <DateTime, List<Meal>>{};
+          for (var doc in snapshot.docs) {
+            final data = doc.data();
+            final days = (data['days'] as Map<String, dynamic>? ?? {});
+            days.forEach((dateStr, mealsList) {
+              final date = DateTime.parse(dateStr);
+              final normalized = DateTime(date.year, date.month, date.day);
+              final meals = (mealsList as List<dynamic>)
+                  .map((e) => Meal.fromMap(Map<String, dynamic>.from(e)))
+                  .toList();
+              map[normalized] = meals;
+            });
+          }
+          return map;
+        });
+  }
+
   }
 
   Future<void> _loadFavoritesAndBookmarks() async {
@@ -515,11 +541,17 @@ Download Byte to Bite to see the full recipe.
           const Divider(height: 1, thickness: 1),
 
           Expanded(
-            child: ListView.builder(
-              itemCount: _currentRecipes.length,
-              itemBuilder: (context, index) {
-                final recipe = _currentRecipes[index];
-                return _buildRecipeCard(recipe);
+            child: StreamBuilder<Map<DateTime, List<Meal>>>(
+              stream: mealPlanStream,
+              builder: (context, snapshot) {
+                final mealPlan = snapshot.data ?? {};
+                return ListView.builder(
+                  itemCount: _currentRecipes.length,
+                  itemBuilder: (context, index) {
+                    final recipe = _currentRecipes[index];
+                    return _buildRecipeCard(recipe, mealPlan);
+                  },
+                );
               },
             ),
           ),
@@ -528,7 +560,12 @@ Download Byte to Bite to see the full recipe.
     );
   }
 
-  Widget _buildRecipeCard(Recipe recipe) {
+  Widget _buildRecipeCard(Recipe recipe, Map<DateTime, List<Meal>> mealPlan) {
+      final today = DateTime.now();
+      final normalizedToday = DateTime(today.year, today.month, today.day);
+      final todayMeals = mealPlan[normalizedToday] ?? [];
+      final isScheduledToday = todayMeals.any((meal) => meal.name == recipe.name);
+    
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
       elevation: 0,

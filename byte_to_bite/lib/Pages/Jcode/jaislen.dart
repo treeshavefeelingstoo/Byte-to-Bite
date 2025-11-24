@@ -79,8 +79,11 @@ class MealPlanRepo {
         final data = doc.data();
         final days = (data['days'] as Map<String, dynamic>? ?? {});
         days.forEach((dateStr, mealsList) {
-          final date = DateTime.parse(dateStr); 
-          final normalized = normalizeDate(date); 
+          //print("Firestore day key: $dateStr → meals count ${(mealsList as List).length}");
+
+          //  Parse the ISO string back into a DateTime
+          final date = DateTime.parse(dateStr); // "2025-11-22T00:00:00.000"
+          final normalized = normalizeDate(date); // ensures midnight
           final meals = (mealsList as List<dynamic>)
               .map((e) => Meal.fromMap(Map<String, dynamic>.from(e)))
               .toList();
@@ -104,9 +107,7 @@ class MealPlanRepo {
     final dayKey = normalizeDate(date).toIso8601String(); 
     final weekStart = weekStartOf(date);
 
-    final docRef = FirebaseFirestore.instance
-        .collection('mealPlans')
-        .doc(mealPlanDocId(uid, weekStart));
+  //print("Saved meal for $dayKey under doc ${docRef.id}");
 
     await docRef.set({
       'userId': uid,
@@ -900,6 +901,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
         final day = index - offset + 1;
         final date = DateTime(_currentMonth.year, _currentMonth.month, day);
         final meals = mealPlan[normalizeDate(date)] ?? [];
+        //print("Looking up ${normalizeDate(date)} → found ${meals.length} meals");
+
 
         return GestureDetector(
           onTap: () => _showMeals(date, mealPlan),
@@ -958,6 +961,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
       children: List.generate(7, (i) {
         final date = week.add(Duration(days: i));
         final meals = mealPlan[normalizeDate(date)] ?? [];
+        //print("Week cell ${normalizeDate(date)} → ${meals.length} meals");
+
 
         return Expanded(
           child: GestureDetector(
@@ -1116,6 +1121,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
             return const Center(child: CircularProgressIndicator());
           }
           final mealPlan = snapshot.data!;
+          //print("MealPlan keys: ${mealPlan.keys}"); //debug
+
 
           return Center(
             child: Container(
