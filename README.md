@@ -17,13 +17,13 @@ Instead of spending time digging for recipes or figuring out what fits your diet
 
 # Installation Steps
    1. Clone the repository
-      https://github.com/treeshavefeelingstoo/Byte-to-Bite
+      ### https://github.com/treeshavefeelingstoo/Byte-to-Bite
    2. Switch to development branch
-      git checkout dev
+      ### git checkout dev
    3. Navigate into project directory
-      cd byte_to_bite
+      ### cd byte_to_bite
    4. Start Android emulator
-      flutter emulator --launch <device_name>
+      ### flutter emulator --launch <device_name>
    5. Run the app
-      flutter run
+      ### flutter run
   
