@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'add_recipe_page.dart';
 
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
+import 'package:byte_to_bite/Pages/AuthorPage/author_page.dart';
 class Recipe {
   final String? id;
   final String name;
@@ -874,11 +875,23 @@ Download Byte to Bite to see the full recipe.
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  recipe.author,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AuthorPage()),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text(
+                    recipe.author,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
                 const Spacer(),
