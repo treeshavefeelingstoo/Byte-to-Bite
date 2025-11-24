@@ -3,6 +3,10 @@ import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
 import 'package:byte_to_bite/Pages/Login/login_page.dart';
 import 'package:byte_to_bite/Pages/WelcomeUser/welcomeuser_page.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
@@ -154,25 +158,72 @@ class _SignUpPageState extends State<SignUpPage> {
                         SizedBox(
                           width: size.width * 0.5,
                           child: ElevatedButton(
-                            onPressed: () {
-                              String firstName = _firstNameController.text;
-                              String lastName = _lastNameController.text;
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => WelcomeUserPage(
-                                    firstName: firstName,
-                                    lastName: lastName,
+                            onPressed: () async {
+                              final firstName = _firstNameController.text.trim();
+                              final lastName = _lastNameController.text.trim();
+                              final email = _emailController.text.trim();
+                              final phone = _phoneController.text.trim();
+                              final password = _passwordController.text;
+
+                              if (email.isEmpty || password.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Please enter email and password')),
+                                );
+                                return;
+                              }
+
+                              try {
+                                // Create user in Firebase Auth
+                                final userCredential = await FirebaseAuth.instance
+                                    .createUserWithEmailAndPassword(
+                                        email: email, password: password);
+
+                                final uid = userCredential.user!.uid;
+
+                                // Create Firestore profile document
+                                await FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(uid)
+                                    .set({
+                                  'firstName': firstName,
+                                  'lastName': lastName,
+                                  'email': email,
+                                  'phone': phone,
+                                  'createdAt': FieldValue.serverTimestamp(),
+                                });
+
+                                // Navigate to WelcomeUserPage
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => WelcomeUserPage(
+                                      firstName: firstName,
+                                      lastName: lastName,
+                                    ),
                                   ),
-                                ),
-                              );
+                                );
+                              } on FirebaseAuthException catch (e) {
+                                String message = 'Signup failed';
+                                if (e.code == 'email-already-in-use') {
+                                  message = 'That email is already registered.';
+                                } else if (e.code == 'weak-password') {
+                                  message = 'Password is too weak.';
+                                }
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(message)),
+                                );
+                              }
                             },
-                            child: Text('SIGN UP'),
                             style: ElevatedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(vertical: 14),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
                             ),
+                            child: const Text('SIGN UP'),
                           ),
                         ),
+
                         SizedBox(height: 12),
                         Row(
                           mainAxisSize: MainAxisSize.min,

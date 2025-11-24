@@ -1,16 +1,37 @@
-import 'package:flutter/material.dart';
-import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
-import 'package:byte_to_bite/constants.dart';
-import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
-import 'package:byte_to_bite/Pages/HomePage/home_page.dart';
-
 import 'dart:io';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'package:byte_to_bite/Pages/Welcome/welcome_page.dart';
+import 'package:byte_to_bite/constants.dart';
 
-void main() => runApp (MyApp());
+import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
+
+import 'package:byte_to_bite/Pages/HomePage/home_page.dart';
+import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+
+Future<void> main() async {
+  // Ensure Flutter bindings are initialized before Firebase
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase with platform-specific options
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  runApp(const MyApp());
+}
+
+
 
 class MyApp extends StatelessWidget {
+  
   const MyApp({super.key});
 
   // This widget is the root of your application.
@@ -48,11 +69,13 @@ class WelcomePageWrapper extends StatelessWidget {
 class DietaryApp extends StatefulWidget {
   final String userName;
   final Set<String>? initialExclusions;
+  final int? initialIndex;
 
   const DietaryApp({
     super.key,
     required this.userName,
     this.initialExclusions,
+    this.initialIndex,
   });
 
 
@@ -67,16 +90,19 @@ class _DietaryAppState extends State<DietaryApp> {
   final Map<DateTime, List<Meal>> _mealPlan = {};
   final Map<DateTime, Set<String>> _groceriesByWeek = {};
   final Map<String, bool> _checkedGroceries = {};
-  final Set<Meal> _savedRecipes = {}; 
+  Set<Meal> _savedRecipes = {};
+
+  
 
   @override
   void initState() {
   super.initState();
+  _selectedIndex = widget.initialIndex ?? 0;
   if (widget.initialExclusions != null) {
     excludedIngredients = widget.initialExclusions!;
-    _saveExclusions(excludedIngredients); // persist them
+    _saveExclusions(excludedIngredients); 
   } else {
-    _loadExclusions(); // fallback to file
+    _loadExclusions(); 
   }
 }
 
@@ -144,52 +170,162 @@ class _DietaryAppState extends State<DietaryApp> {
       return _groceriesByWeek[weekStart] ?? <String>{};
     }
 
-    void _toggleSaveRecipe(Meal meal) {
-      setState(() {
-        final existingMeal = _savedRecipes.firstWhere(
-          (m) => m.name == meal.name,
-          orElse: () => meal,
-        );
-        if (_savedRecipes.contains(existingMeal)) {
-          _savedRecipes.remove(existingMeal);
-        } else {
-          _savedRecipes.add(meal);
-        }
-      });
+    Future<void> _toggleSaveRecipe(Meal meal) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final docRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('saved')
+      .doc(meal.name); // replace with meal.id if available
+
+  final snapshot = await docRef.get();
+
+  if (snapshot.exists) {
+    await docRef.delete();
+    setState(() {
+      _savedRecipes?.remove(meal);
+    });
+  } else {
+    await docRef.set({
+      'name': meal.name,
+      'ingredients': meal.ingredients.map((i) => i.toString()).toList(),
+      'restrictions': meal.restrictions.map((r) => r.toString()).toList(),
+      'color': meal.color.value,
+      'icon': meal.icon.codePoint,
+    });
+    setState(() {
+      _savedRecipes?.add(meal);
+    });
+  }
+}
+
+
+
+    Future<void> _addMealToFavorites(Meal meal) async  {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // Map meal colors to image URLs 
+      final Map<Color, String> colorToImage = {
+        Colors.green: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400',
+        Colors.orange: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
+        Colors.blue: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=400',
+        Colors.purple: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?w=400',
+        Colors.brown: 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=400',
+        Colors.red: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400',
+        Colors.teal: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400',
+        Colors.amber: 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=400',
+      };
+
+      final Map<String, dynamic> mealMap = {
+        'name': meal.name,
+        'imageUrl': colorToImage[meal.color] ?? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
+        'hashtags': meal.restrictions.map((r) => '#${r.toLowerCase().replaceAll(' ', '')}').toList(),
+        'author': 'Meal Planner',
+      };
+
+      await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('favorites')
+      .doc(meal.name) // use recipe name or a unique ID
+      .set(mealMap);
+
     }
+
+    Future<void> _toggleFavoriteRecipe(Recipe recipe) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final docRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('favorites')
+      .doc(recipe.name);
+
+  final snapshot = await docRef.get();
+  if (snapshot.exists) {
+    await docRef.delete();
+  } else {
+    await docRef.set({
+      'name': recipe.name,
+      'imageUrl': recipe.imageUrl,
+      'hashtags': recipe.hashtags,
+      'author': recipe.author,
+    });
+  }
+}
+
+Future<void> _toggleBookmarkRecipe(Recipe recipe) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final docRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('bookmarks')
+      .doc(recipe.name);
+
+  final snapshot = await docRef.get();
+  if (snapshot.exists) {
+    await docRef.delete();
+  } else {
+    await docRef.set({
+      'name': recipe.name,
+      'imageUrl': recipe.imageUrl,
+      'hashtags': recipe.hashtags,
+      'author': recipe.author,
+    });
+  }
+}
+
+
 
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       HomePage(
-        mealPlan: _mealPlan,
+        mealPlan: _mealPlan as Map<DateTime, List<Meal>>?,
         onWeekGroceriesChanged: _handleWeekGroceriesChanged,
         getWeekGroceries: _getWeekGroceries,
         excludedIngredients: excludedIngredients,
         userName: widget.userName,
       ),
+      RecipeFeedPage(
+        userName: widget.userName,
+        onToggleFavorite: _toggleFavoriteRecipe,
+        onToggleBookmark: _toggleBookmarkRecipe,
+        favoriteRecipeNamesStream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(FirebaseAuth.instance.currentUser!.uid)
+            .collection('favorites')
+            .snapshots(),
+        bookmarkedRecipeNamesStream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(FirebaseAuth.instance.currentUser!.uid)
+            .collection('bookmarks')
+            .snapshots(),
+      ),
       AllergySelectorScreen(
         onRestrictionsChanged: _updateExclusions,
         initialSelections: excludedIngredients,
       ),
-      MealPlannerPage(
-        mealPlan: _mealPlan,
-        onWeekGroceriesChanged: _handleWeekGroceriesChanged,
-        getWeekGroceries: _getWeekGroceries,
-        excludedIngredients: excludedIngredients,
-        savedRecipes: _savedRecipes,
-        onToggleSaveRecipe: _toggleSaveRecipe,
+    MealPlannerPage(
+      excludedIngredients: excludedIngredients,
+      savedRecipes: _savedRecipes,
+      onToggleSaveRecipe: _toggleSaveRecipe,
+    ),
+    GroceryPage(
+      onBackToMealPrep: () => setState(() => _selectedIndex = 3),
+    ),
+
+      ProfilePage(
+        userName: widget.userName,
       ),
 
-      GroceryPage(
-        groceriesByWeek: _groceriesByWeek,
-        checkedGroceries: _checkedGroceries,
-        onToggleItem: _toggleGroceryItem,
-        onDeleteWeek: _deleteWeek,
-        onBackToMealPrep: () => setState(() => _selectedIndex = 2),
-      ),
-      ProfilePage(userName: widget.userName, savedRecipes: _savedRecipes),
     ];
 
       return Theme(
@@ -204,8 +340,10 @@ class _DietaryAppState extends State<DietaryApp> {
           onTap: (index) => setState(() => _selectedIndex = index),
           selectedItemColor: Colors.white,
           unselectedItemColor: Colors.white70,
+          type: BottomNavigationBarType.fixed,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.restaurant_menu), label: 'Recipes'),
             BottomNavigationBarItem(icon: Icon(Icons.restaurant), label: 'Restrictions'),
             BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Meal Prep'),
             BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Groceries'),
@@ -344,11 +482,34 @@ class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
   }
 }
 
-class ProfilePage extends StatelessWidget{
+class ProfilePage extends StatefulWidget {
   final String userName;
-  final Set<Meal> savedRecipes;
   
-  const ProfilePage({super.key, this.userName = 'User', required this.savedRecipes});
+  const ProfilePage({
+    super.key, 
+    this.userName = 'User',
+  });
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+
 
   void _showSignOutDialog(BuildContext context) {
     showDialog(
@@ -365,13 +526,13 @@ class ProfilePage extends StatelessWidget{
               child: const Text('No'),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); 
-                // Navigate to the welcome page
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await FirebaseAuth.instance.signOut(); // Firebase sign out
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (_) => const WelcomePageWrapper()),
-                  (route) => false, 
+                  (route) => false,
                 );
               },
               style: TextButton.styleFrom(
@@ -387,185 +548,495 @@ class ProfilePage extends StatelessWidget{
 
   @override
   Widget build(BuildContext context) {
+     final user = FirebaseAuth.instance.currentUser; //Current Firebase user
     return Scaffold(
       appBar: AppBar(
         title: const Text("Your Profile"),
         backgroundColor: Colors.green[700],
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: () => _showSettingsMenu(context),
+            tooltip: 'Settings',
+          ),
+        ],
       ),
       body: Column(
         children: <Widget>[
           const SizedBox(height: 30),
           // Profile Picture Circle
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF5aa454),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[300]!, width: 3),
-                ),
-                child: const Icon(
-                  Icons.person,
-                  size: 60,
-                  color: Colors.white,
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Upload profile picture feature coming soon!')),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final profilePictureUrl = snapshot.data?.data()?['profilePictureUrl'] as String?;
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF5aa454),
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF5aa454), width: 2),
+                      border: Border.all(color: Colors.grey[300]!, width: 3),
+                      image: profilePictureUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(profilePictureUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      size: 20,
-                      color: Color(0xFF5aa454),
+                    child: profilePictureUrl == null
+                        ? const Icon(
+                            Icons.person,
+                            size: 60,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFF5aa454), width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt,
+                          size: 20,
+                          color: Color(0xFF5aa454),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 15),
-          // User Name
-          Text(
-            userName,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 25),
-          // Followers and Following Buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              OutlinedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Followers list coming soon!')),
-                  );
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF5aa454), width: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                ),
-                child: const Text(
-                  'Followers: 0',
+
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Text(
+                  'Loading...',
                   style: TextStyle(
-                    color: Color(0xFF5aa454),
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
+                );
+              }
+              final data = snapshot.data!.data();
+              final firstName = data?['firstName'] ?? 'User';
+
+              return Text(
+                firstName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
-              ),
-              const SizedBox(width: 15),
-              OutlinedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Following list coming soon!')),
-                  );
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF5aa454), width: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                ),
-                child: const Text(
-                  'Following: 0',
-                  style: TextStyle(
-                    color: Color(0xFF5aa454),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+              );
+            },
           ),
+          
           const SizedBox(height: 20),
-          // Saved Recipes and Your Recipes buttons
+
+          //  Stats Row (Posts, Followers, Following)
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SavedRecipesPage(savedRecipes: savedRecipes),
-                    ),
-                  );
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('recipes')
+                    .where('createdBy',
+                        isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return _buildStatColumn('Posts', '0');
+                  }
+                  final count = snapshot.data!.docs.length;
+                  return _buildStatColumn('Posts', '$count');
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5aa454),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-                icon: const Icon(Icons.favorite),
-                label: const Text(
-                  'Saved Recipes',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
               ),
-              const SizedBox(width: 15),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const UserRecipesPage()),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5aa454),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-                icon: const Icon(Icons.restaurant),
-                label: const Text(
-                  'Your Recipes',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-              ),
+
+              _buildStatColumn('Followers', '0'),
+              _buildStatColumn('Following', '0'),
             ],
           ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => _showSignOutDialog(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[700],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+
+          const SizedBox(height: 20),
+
+          //  TabBar for Posts, Saved and Favorites
+          TabBar(
+            controller: _tabController,
+            labelColor: const Color(0xFF5aa454),
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: const Color(0xFF5aa454),
+            tabs: const [
+              Tab(icon: Icon(Icons.grid_on), text: 'Posts'),
+              Tab(icon: Icon(Icons.bookmark), text: 'Saved'),
+              Tab(icon: Icon(Icons.favorite), text: 'Favorites'),
+            ],
+          ),
+
+          //  TabBarView with recipe grids
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Posts tab
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('recipes')
+                      .where('createdBy',
+                          isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final recipes = snapshot.data!.docs
+                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .toList();
+
+                    return _buildRecipeGrid(recipes);                  
+                  },
                 ),
-                child: const Text(
-                  'Sign Out / Log In to Another Account',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                // Saved (Bookmarks) tab
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .collection('bookmarks')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final recipes = snapshot.data!.docs
+                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .toList();
+
+                    return _buildRecipeGrid(recipes);                  
+                  },
                 ),
-              ),
+                // Favorites tab
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .collection('favorites')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final recipes = snapshot.data!.docs
+                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .toList();
+
+                    return _buildRecipeGrid(recipes);                  
+                  },
+                ),
+              ],
             ),
           ),
         ],
-      )
+      ),
+    );
+  }
+
+
+  void _showSettingsMenu(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              
+              ExpansionTile(
+              leading: const Icon(Icons.info, color: Color(0xFF5aa454)),
+              title: const Text('Profile Info'),
+              children: [
+                ListTile(
+                  title: Text('Email: ${user?.email ?? ''}'),
+                ),
+                ListTile(
+                  title: Text('UID: ${user?.uid ?? ''}'),
+                ),
+                ListTile(
+                  title: Text('Created: ${user?.metadata.creationTime}'),
+                ),
+                ListTile(
+                  title: Text('Last login: ${user?.metadata.lastSignInTime}'),
+                ),
+                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const ListTile(title: Text('Loading...'));
+                    }
+                    final data = snapshot.data!.data();
+                    if (data == null) {
+                      return const ListTile(title: Text('No profile data found'));
+                    }
+                    return Column(
+                      children: [
+                        ListTile(title: Text('First name: ${data['firstName'] ?? ''}')),
+                        ListTile(title: Text('Last name: ${data['lastName'] ?? ''}')),
+                        ListTile(title: Text('Phone: ${data['phone'] ?? ''}')),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+
+              ListTile(
+                leading: const Icon(Icons.settings, color: Color(0xFF5aa454)),
+                title: const Text('Account Settings'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Account settings coming soon!')),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.lock, color: Color(0xFF5aa454)),
+                title: const Text('Privacy'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Privacy settings coming soon!')),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.help_outline, color: Color(0xFF5aa454)),
+                title: const Text('Help & Support'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Help & support coming soon!')),
+                  );
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text(
+                  'Sign Out',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showSignOutDialog(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatColumn(String label, String count) {
+    return Column(
+      children: [
+        Text(
+          count,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecipeGrid(List<Recipe> recipes){
+    if (recipes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.restaurant, size: 80, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No recipes yet',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(2),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+      ),
+      itemCount: recipes.length,
+      itemBuilder: (context, index) {
+        final recipe = recipes[index];
+        return GestureDetector(
+          onTap: () {
+            _showRecipeDetail(recipe);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+            ),
+            child: Image.network(
+              recipe.imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey[300],
+                  child: const Center(
+                    child: Icon(Icons.restaurant, size: 40, color: Colors.grey),
+                  ),
+                );
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                        : null,
+                    color: const Color(0xFF5aa454),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showRecipeDetail(Recipe recipe) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          contentPadding: EdgeInsets.zero,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Recipe Image
+              Container(
+                width: double.infinity,
+                height: 250,
+                child: Image.network(
+                  recipe.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: Icon(Icons.restaurant, size: 60, color: Colors.grey),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recipe.name,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: (recipe.hashtags as List<String>).map((tag) {
+                        return Text(
+                          tag,
+                          style: TextStyle(
+                            color: Colors.blue[700],
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -578,76 +1049,186 @@ class UserRecipesPage extends StatefulWidget {
 }
 
 class _UserRecipesPageState extends State<UserRecipesPage> {
-  final List<Map<String, String>> _userRecipes = [
-    {
-      'name': 'Hummus',
-      'ingredients': 'Chickpeas, Tahini, Olive Oil',
-    },
-  ];
 
-  void _addRecipe(String name, String ingredients) {
-    setState(() {
-      _userRecipes.add({
-        'name': name,
-        'ingredients': ingredients,
-      });
+  Future<void> _addRecipe(String name, String ingredients) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    await FirebaseFirestore.instance.collection('recipes').add({
+      'name': name,
+      'ingredients': ingredients.split(',').map((i) => i.trim()).toList(),
+      'rating': 0.0,
+      'ratingCount': 0,
+      'isShared': false,
+      'createdBy': user.uid,
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Your Recipes"),
+
+  Future<void> _toggleShare(String docId, bool currentValue) async {
+    await FirebaseFirestore.instance
+        .collection('recipes')
+        .doc(docId)
+        .update({'isShared': !currentValue});
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(!currentValue
+            ? 'Recipe shared with community!'
+            : 'Recipe made private'),
         backgroundColor: const Color(0xFF5aa454),
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _userRecipes.length,
-        itemBuilder: (context, index) {
-          final recipe = _userRecipes[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            child: ListTile(
-              title: Text(
-                recipe['name'] ?? '',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              subtitle: Text("Ingredients: ${recipe['ingredients'] ?? ''}"),
-              trailing: const Icon(Icons.arrow_forward_ios),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Recipe details soon!')),
-                );
-              },
-            ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddRecipePage(onAddRecipe: _addRecipe),
-            ),
-          );
-        },
-        backgroundColor: const Color(0xFF5aa454),
-        child: const Icon(Icons.add),
       ),
     );
   }
+
+
+  @override
+  Widget build(BuildContext context) {
+  final user = FirebaseAuth.instance.currentUser;
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text("Your Recipes"),
+      backgroundColor: const Color(0xFF5aa454),
+    ),
+    body: StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('recipes')
+          .where('createdBy', isEqualTo: user?.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final recipes = snapshot.data!.docs;
+
+        if (recipes.isEmpty) {
+          return const Center(
+            child: Text(
+              'No recipes yet. Add one!',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: recipes.length,
+          itemBuilder: (context, index) {
+            final doc = recipes[index];
+            final recipe = doc.data() as Map<String, dynamic>;
+
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: ListTile(
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        recipe['name'] ?? '',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    if (recipe['isShared'])
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.green[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.public, size: 14, color: Colors.green),
+                            SizedBox(width: 4),
+                            Text(
+                              'Shared',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.green),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Text("Ingredients: ${recipe['ingredients'] ?? ''}"),
+                    if (recipe['ratingCount'] > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.star,
+                              size: 16, color: Colors.amber),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${recipe['rating'].toStringAsFixed(1)} '
+                            '(${recipe['ratingCount']} ratings)',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+                trailing: IconButton(
+                  icon: Icon(
+                    recipe['isShared'] ? Icons.public : Icons.lock,
+                    color:
+                        recipe['isShared'] ? Colors.green : Colors.grey,
+                  ),
+                  onPressed: () => _toggleShare(
+                    doc.id,
+                    recipe['isShared'] as bool,
+                  ),
+                  tooltip: recipe['isShared']
+                      ? 'Make private'
+                      : 'Share with community',
+                ),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Recipe details coming soon!')),
+                  );
+                },
+              ),
+            );
+          },
+        );
+      },
+    ), // 👈 close StreamBuilder properly here
+    floatingActionButton: FloatingActionButton(
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AddRecipePage(onAddRecipe: _addRecipe),
+          ),
+        );
+      },
+      backgroundColor: const Color(0xFF5aa454),
+      child: const Icon(Icons.add),
+    ),
+  );
+}
 }
 
 class AddRecipePage extends StatefulWidget {
-  final Function(String name, String ingredients) onAddRecipe;
+  final Future<void> Function(String name, String ingredients) onAddRecipe;
 
   const AddRecipePage({super.key, required this.onAddRecipe});
 
   @override
   State<AddRecipePage> createState() => _AddRecipePageState();
 }
+
 
 class _AddRecipePageState extends State<AddRecipePage> {
   final _formKey = GlobalKey<FormState>();
@@ -661,22 +1242,26 @@ class _AddRecipePageState extends State<AddRecipePage> {
     super.dispose();
   }
 
-  void _submitRecipe() {
-    if (_formKey.currentState!.validate()) {
-      widget.onAddRecipe(
-        _recipeNameController.text.trim(),
-        _ingredientsController.text.trim(),
-      );
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Recipe added successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
+  Future<void> _submitRecipe() async {
+  if (_formKey.currentState!.validate()) {
+    //  Call the callback you passed in from UserRecipesPage
+    await widget.onAddRecipe(
+      _recipeNameController.text.trim(),
+      _ingredientsController.text.trim(),
+    );
 
+    // Close the AddRecipePage
+    Navigator.pop(context);
+
+    // Show confirmation
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Recipe added successfully!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -767,21 +1352,33 @@ class SavedRecipesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       appBar: AppBar(
         title: const Text("Saved Recipes"),
         backgroundColor: const Color(0xFF5aa454),
       ),
-      body: savedRecipes.isEmpty
-          ? const Center(
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .collection('saved')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final meals = snapshot.data!.docs
+            .map((doc) => Meal.fromMap(doc.data() as Map<String, dynamic>))
+            .toList();
+
+          if (savedRecipes.isEmpty) {
+            return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.favorite_border,
-                    size: 80,
-                    color: Colors.grey,
-                  ),
+                  Icon(Icons.favorite_border, size: 80, color: Colors.grey),
                   SizedBox(height: 20),
                   Text(
                     'No saved recipes yet',
@@ -802,8 +1399,10 @@ class SavedRecipesPage extends StatelessWidget {
                   ),
                 ],
               ),
-            )
-          : ListView.builder(
+            );
+          }
+
+          return ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: savedRecipes.length,
               itemBuilder: (context, index) {
@@ -890,14 +1489,17 @@ class SavedRecipesPage extends StatelessWidget {
                               onPressed: () => Navigator.pop(context),
                               child: const Text('Close'),
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
+
