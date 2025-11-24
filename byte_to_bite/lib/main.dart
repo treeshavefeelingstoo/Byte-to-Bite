@@ -11,9 +11,11 @@ import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
 
 import 'package:byte_to_bite/Pages/HomePage/home_page.dart';
 import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
+import 'package:byte_to_bite/Pages/Profilepic/profilepic_page.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 Future<void> main() async {
@@ -253,6 +255,7 @@ class _DietaryAppState extends State<DietaryApp> {
       'name': recipe.name,
       'imageUrl': recipe.imageUrl,
       'hashtags': recipe.hashtags,
+      'ingredients': recipe.ingredients,
       'author': recipe.author,
     });
   }
@@ -276,6 +279,7 @@ Future<void> _toggleBookmarkRecipe(Recipe recipe) async {
       'name': recipe.name,
       'imageUrl': recipe.imageUrl,
       'hashtags': recipe.hashtags,
+      'ingredients': recipe.ingredients,
       'author': recipe.author,
     });
   }
@@ -509,7 +513,10 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     super.dispose();
   }
 
-
+  Future<String?> _getLocalProfilePicture() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('profile_picture_path');
+  }
 
   void _showSignOutDialog(BuildContext context) {
     showDialog(
@@ -566,13 +573,10 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         children: <Widget>[
           const SizedBox(height: 30),
           // Profile Picture Circle
-          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .doc(user?.uid)
-                .snapshots(),
+          FutureBuilder<String?>(
+            future: _getLocalProfilePicture(),
             builder: (context, snapshot) {
-              final profilePictureUrl = snapshot.data?.data()?['profilePictureUrl'] as String?;
+              final profilePicturePath = snapshot.data;
 
               return Stack(
                 alignment: Alignment.center,
@@ -584,14 +588,14 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                       color: const Color(0xFF5aa454),
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.grey[300]!, width: 3),
-                      image: profilePictureUrl != null
+                      image: profilePicturePath != null && File(profilePicturePath).existsSync()
                           ? DecorationImage(
-                              image: NetworkImage(profilePictureUrl),
+                              image: FileImage(File(profilePicturePath)),
                               fit: BoxFit.cover,
                             )
                           : null,
                     ),
-                    child: profilePictureUrl == null
+                    child: profilePicturePath == null || !File(profilePicturePath).existsSync()
                         ? const Icon(
                             Icons.person,
                             size: 60,
@@ -603,6 +607,18 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                     bottom: 0,
                     right: 0,
                     child: GestureDetector(
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ProfilePicturePage(),
+                          ),
+                        );
+                        // Refresh the profile page after returning
+                        if (mounted) {
+                          setState(() {});
+                        }
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -662,15 +678,20 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             children: [
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(FirebaseAuth.instance.currentUser?.uid)
                     .collection('recipes')
-                    .where('createdBy',
-                        isEqualTo: FirebaseAuth.instance.currentUser?.uid)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return _buildStatColumn('Posts', '0');
                   }
-                  final count = snapshot.data!.docs.length;
+                  // Count only non-archived posts
+                  final count = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final isArchived = data['isArchived'] ?? false;
+                    return !isArchived;
+                  }).length;
                   return _buildStatColumn('Posts', '$count');
                 },
               ),
@@ -703,20 +724,29 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 // Posts tab
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(FirebaseAuth.instance.currentUser?.uid)
                       .collection('recipes')
-                      .where('createdBy',
-                          isEqualTo: FirebaseAuth.instance.currentUser?.uid)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
+                    // Filter out archived posts (in case isArchived field exists)
                     final recipes = snapshot.data!.docs
-                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .where((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final isArchived = data['isArchived'] ?? false;
+                          return !isArchived;
+                        })
+                        .map((doc) => Recipe.fromMap(
+                              doc.data() as Map<String, dynamic>,
+                              id: doc.id,
+                            ))
                         .toList();
 
-                    return _buildRecipeGrid(recipes);                  
+                    return _buildRecipeGrid(recipes, isUserPosts: true);                  
                   },
                 ),
                 // Saved (Bookmarks) tab
@@ -735,7 +765,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                         .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
                         .toList();
 
-                    return _buildRecipeGrid(recipes);                  
+                    return _buildRecipeGrid(recipes, isSaved: true);                  
                   },
                 ),
                 // Favorites tab
@@ -754,7 +784,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                         .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
                         .toList();
 
-                    return _buildRecipeGrid(recipes);                  
+                    return _buildRecipeGrid(recipes, isFavorites: true);                  
                   },
                 ),
               ],
@@ -790,6 +820,19 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 ),
               ),
               
+              ListTile(
+                leading: const Icon(Icons.archive, color: Color(0xFF5aa454)),
+                title: const Text('Archived Posts'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ArchivedPostsPage(),
+                    ),
+                  );
+                },
+              ),
               ExpansionTile(
               leading: const Icon(Icons.info, color: Color(0xFF5aa454)),
               title: const Text('Profile Info'),
@@ -902,7 +945,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildRecipeGrid(List<Recipe> recipes){
+  Widget _buildRecipeGrid(List<Recipe> recipes, {bool isUserPosts = false, bool isSaved = false, bool isFavorites = false}){
     if (recipes.isEmpty) {
       return Center(
         child: Column(
@@ -936,38 +979,322 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
           onTap: () {
             _showRecipeDetail(recipe);
           },
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-            ),
-            child: Image.network(
-              recipe.imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(
+                decoration: BoxDecoration(
                   color: Colors.grey[300],
-                  child: const Center(
-                    child: Icon(Icons.restaurant, size: 40, color: Colors.grey),
+                ),
+                child: Image.network(
+                  recipe.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: Icon(Icons.restaurant, size: 40, color: Colors.grey),
+                      ),
+                    );
+                  },
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                            : null,
+                        color: const Color(0xFF5aa454),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              if (isUserPosts)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: GestureDetector(
+                    onTap: () => _showPostOptionsMenu(recipe),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.more_vert,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
                   ),
-                );
-              },
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded /
-                            loadingProgress.expectedTotalBytes!
-                        : null,
-                    color: const Color(0xFF5aa454),
+                ),
+              if (isSaved || isFavorites)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: GestureDetector(
+                    onTap: () => _showSavedFavoritesMenu(recipe, isSaved: isSaved, isFavorites: isFavorites),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.more_vert,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
                   ),
-                );
-              },
-            ),
+                ),
+            ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _showPostOptionsMenu(Recipe recipe) async {
+    final option = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.archive, color: Color(0xFF5aa454)),
+                title: const Text('Archive Post'),
+                onTap: () => Navigator.pop(context, 'archive'),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (option == 'archive') {
+      _archivePost(recipe);
+    } else if (option == 'delete') {
+      _deletePost(recipe);
+    }
+  }
+
+  Future<void> _archivePost(Recipe recipe) async {
+    if (recipe.id == null) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('recipes')
+          .doc(recipe.id)
+          .update({'isArchived': true});
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Recipe archived successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error archiving recipe: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deletePost(Recipe recipe) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Recipe'),
+          content: Text('Are you sure you want to delete "${recipe.name}"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+              ),
+              child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && recipe.id != null) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('recipes')
+            .doc(recipe.id)
+            .delete();
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recipe deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting recipe: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showSavedFavoritesMenu(Recipe recipe, {required bool isSaved, required bool isFavorites}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final option = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: Text(
+                  isSaved ? 'Remove from Saved' : 'Remove from Favorites',
+                  style: const TextStyle(color: Colors.red),
+                ),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (option == 'delete') {
+      try {
+        if (isSaved) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .collection('bookmarks')
+              .doc(recipe.name)
+              .delete();
+        } else if (isFavorites) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .collection('favorites')
+              .doc(recipe.name)
+              .delete();
+        }
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isSaved ? 'Removed from Saved' : 'Removed from Favorites'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error removing recipe: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _unarchivePost(Recipe recipe) async {
+    if (recipe.id == null) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('recipes')
+          .doc(recipe.id)
+          .update({'isArchived': false});
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Recipe unarchived successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error unarchiving recipe: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showRecipeDetail(Recipe recipe) {
@@ -1010,10 +1337,32 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                       ),
                     ),
                     const SizedBox(height: 8),
+                    
+                    // Ingredients button
+                    if (recipe.ingredients.isNotEmpty)
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showIngredientsDialog(recipe);
+                        },
+                        child: const Text(
+                          'Ingredients',
+                          style: TextStyle(
+                            color: Color(0xFF479E36),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            decoration: TextDecoration.underline,
+                            decorationColor: Color(0xFF479E36),
+                          ),
+                        ),
+                      ),
+                    
+                    const SizedBox(height: 8),
+                    
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children: (recipe.hashtags as List<String>).map((tag) {
+                      children: recipe.hashtags.map((tag) {
                         return Text(
                           tag,
                           style: TextStyle(
@@ -1037,6 +1386,15 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
           ],
         );
       },
+    );
+  }
+
+  void _showIngredientsDialog(Recipe recipe) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => IngredientSubstitutionPage(recipe: recipe),
+      ),
     );
   }
 }
@@ -1499,6 +1857,319 @@ class SavedRecipesPage extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// Archived Posts Page
+class ArchivedPostsPage extends StatelessWidget {
+  const ArchivedPostsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Archived Posts'),
+        backgroundColor: Colors.green[700],
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(user?.uid)
+            .collection('recipes')
+            .where('isArchived', isEqualTo: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final archivedRecipes = snapshot.data!.docs
+              .map((doc) => Recipe.fromMap(
+                    doc.data() as Map<String, dynamic>,
+                    id: doc.id,
+                  ))
+              .toList();
+
+          if (archivedRecipes.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.archive, size: 80, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No archived posts',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return GridView.builder(
+            padding: const EdgeInsets.all(2),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 2,
+              mainAxisSpacing: 2,
+            ),
+            itemCount: archivedRecipes.length,
+            itemBuilder: (context, index) {
+              final recipe = archivedRecipes[index];
+              return GestureDetector(
+                onTap: () => _showArchivedRecipeDetail(context, recipe),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.network(
+                      recipe.imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.image_not_supported),
+                        );
+                      },
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: GestureDetector(
+                        onTap: () => _showUnarchiveMenu(context, recipe),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.more_vert,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _showUnarchiveMenu(BuildContext context, Recipe recipe) async {
+    final option = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.unarchive, color: Color(0xFF5aa454)),
+                title: const Text('Unarchive Post'),
+                onTap: () => Navigator.pop(context, 'unarchive'),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (option == 'unarchive') {
+      _unarchivePost(context, recipe);
+    } else if (option == 'delete') {
+      _deletePost(context, recipe);
+    }
+  }
+
+  Future<void> _unarchivePost(BuildContext context, Recipe recipe) async {
+    if (recipe.id == null) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('recipes')
+          .doc(recipe.id)
+          .update({'isArchived': false});
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recipe unarchived successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error unarchiving recipe: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deletePost(BuildContext context, Recipe recipe) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Recipe'),
+          content: Text('Are you sure you want to permanently delete "${recipe.name}"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+              ),
+              child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && recipe.id != null) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('recipes')
+            .doc(recipe.id)
+            .delete();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Recipe deleted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting recipe: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _showArchivedRecipeDetail(BuildContext context, Recipe recipe) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          contentPadding: EdgeInsets.zero,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Image.network(
+                recipe.imageUrl,
+                width: double.infinity,
+                height: 200,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: double.infinity,
+                    height: 200,
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.image_not_supported, size: 50),
+                  );
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recipe.name,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'By ${recipe.author}',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (recipe.hashtags.isNotEmpty)
+                      Wrap(
+                        spacing: 8,
+                        children: recipe.hashtags.map((tag) {
+                          return Chip(
+                            label: Text(tag),
+                            backgroundColor: Colors.green[100],
+                          );
+                        }).toList(),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

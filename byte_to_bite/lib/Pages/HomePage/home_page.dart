@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
 
 class HomePage extends StatefulWidget {
-  final Map<DateTime, List<Meal>>? mealPlan;   // <-- nullable
+  final Map<DateTime, List<Meal>>? mealPlan;   
   final void Function(DateTime weekStart, Set<String> items)? onWeekGroceriesChanged;
   final Set<String> Function(DateTime weekStart)? getWeekGroceries;
   final Set<String>? excludedIngredients;
