@@ -28,13 +28,22 @@ class Meal {
       };
 
   static Meal fromMap(Map<String, dynamic> m) {
+    final type = m['mealType'] as String? ?? 'lunch';
+    Color color;
+    IconData icon;
+    switch (type.toLowerCase()) {
+      case 'breakfast': color = Colors.purple; icon = Icons.free_breakfast; break;
+      case 'lunch': color = Colors.red; icon = Icons.lunch_dining; break;
+      case 'dinner': color = Colors.blue; icon = Icons.dinner_dining; break;
+      default: color = Colors.grey; icon = Icons.restaurant;
+    }
     return Meal(
       m['name'] as String,
       List<String>.from(m['ingredients'] ?? const []),
       restrictions: List<String>.from(m['restrictions'] ?? const []),
-      mealType: m['mealType'] as String? ?? 'lunch',
-      color: Colors.blue,
-      icon: Icons.restaurant,
+      mealType: type,
+      color: color,
+      icon: icon,
     );
   }
 }
@@ -60,10 +69,18 @@ class MealPlanRepo {
         final data = doc.data();
         final days = (data['days'] as Map<String, dynamic>? ?? {});
         days.forEach((dateStr, mealsList) {
-          final date = DateTime.parse(dateStr);
-          final meals = (mealsList as List<dynamic>).map((e) => Meal.fromMap(Map<String, dynamic>.from(e))).toList();
-          map[date] = meals;
+          //print("Firestore day key: $dateStr → meals count ${(mealsList as List).length}");
+
+          //  Parse the ISO string back into a DateTime
+          final date = DateTime.parse(dateStr); // "2025-11-22T00:00:00.000"
+          final normalized = normalizeDate(date); // ensures midnight
+          final meals = (mealsList as List<dynamic>)
+              .map((e) => Meal.fromMap(Map<String, dynamic>.from(e)))
+              .toList();
+          //  Use normalized DateTime as the key in the map
+          map[normalized] = meals;
         });
+
       }
       return map;
     });
@@ -79,23 +96,26 @@ class MealPlanRepo {
     throw Exception("User not signed in");
   }
 
-  final dayKey = isoDate(date);   // e.g. "2025-11-22"
+  final dayKey = normalizeDate(date).toIso8601String(); // e.g. 
+  final weekStart = weekStartOf(date);
   final weekKey = isoWeek(date);  // e.g. "2025-W47"
 
   final docRef = FirebaseFirestore.instance
       .collection('mealPlans')
-      .doc(mealPlanDocId(uid, date));
+      .doc(mealPlanDocId(uid, weekStart));
 
   await docRef.set({
-    'userId': uid,        //  required by Firestore rules
+    'userId': uid,
     'weekStart': weekKey,
-    'days.$dayKey': FieldValue.arrayUnion([
-      {
-        ...meal.toMap(),  // includes name, ingredients, restrictions
-        'mealType': mealType,
-      }
-    ]),
+    'days': {
+      dayKey: FieldValue.arrayUnion([
+        {...meal.toMap(), 'mealType': mealType},
+      ]),
+    },
   }, SetOptions(merge: true));
+
+  //print("Saved meal for $dayKey under doc ${docRef.id}");
+
 }
 
   Future<void> deleteMeal({
@@ -387,7 +407,7 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
 
   void _showMeals(DateTime date, Map<DateTime, List<Meal>> mealPlan) {
     final key = normalizeDate(date);
-    final meals = mealPlan[key] ?? [];
+    final meals = mealPlan[normalizeDate(date)] ?? [];
 
     showDialog(
       context: context,
@@ -452,6 +472,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
         final day = index - offset + 1;
         final date = DateTime(_currentMonth.year, _currentMonth.month, day);
         final meals = mealPlan[normalizeDate(date)] ?? [];
+        //print("Looking up ${normalizeDate(date)} → found ${meals.length} meals");
+
 
         return GestureDetector(
           onTap: () => _showMeals(date, mealPlan),
@@ -466,7 +488,28 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
               child: Column(
                 children: [
                   Text(day.toString()),
-                  if (meals.isNotEmpty) Text("${meals.length} meals", style: const TextStyle(fontSize: 10)),
+                  if (meals.isNotEmpty)
+                    Wrap(
+                      spacing: 2,
+                      children: meals.map((meal) {
+                        Color dotColor;
+                        switch (meal.mealType.toLowerCase()) {
+                          case 'breakfast': dotColor = Colors.purple; break;
+                          case 'lunch': dotColor = Colors.red; break;
+                          case 'dinner': dotColor = Colors.blue; break;
+                          default: dotColor = Colors.grey;
+                        }
+                        return Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: dotColor,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
                 ],
               ),
             ),
@@ -483,6 +526,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
       children: List.generate(7, (i) {
         final date = week.add(Duration(days: i));
         final meals = mealPlan[normalizeDate(date)] ?? [];
+        //print("Week cell ${normalizeDate(date)} → ${meals.length} meals");
+
 
         return Expanded(
           child: GestureDetector(
@@ -498,7 +543,28 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
               child: Column(
                 children: [
                   Text("${date.day}"),
-                  if (meals.isNotEmpty) Text("${meals.length} meals", style: const TextStyle(fontSize: 10)),
+                  if (meals.isNotEmpty)
+                    Wrap(
+                      spacing: 2,
+                      children: meals.map((meal) {
+                        Color dotColor;
+                        switch (meal.mealType.toLowerCase()) {
+                          case 'breakfast': dotColor = Colors.purple; break;
+                          case 'lunch': dotColor = Colors.red; break;
+                          case 'dinner': dotColor = Colors.blue; break;
+                          default: dotColor = Colors.grey;
+                        }
+                        return Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: dotColor,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
                 ],
               ),
             ),
@@ -614,6 +680,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
             return const Center(child: CircularProgressIndicator());
           }
           final mealPlan = snapshot.data!;
+          //print("MealPlan keys: ${mealPlan.keys}"); //debug
+
 
           return Center(
             child: Container(

@@ -15,6 +15,7 @@ import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+
 Future<void> main() async {
   // Ensure Flutter bindings are initialized before Firebase
   WidgetsFlutterBinding.ensureInitialized();
@@ -90,10 +91,6 @@ class _DietaryAppState extends State<DietaryApp> {
   final Map<DateTime, Set<String>> _groceriesByWeek = {};
   final Map<String, bool> _checkedGroceries = {};
   Set<Meal> _savedRecipes = {};
-
-
-  List<Recipe> _favoriteRecipes = [];
-  List<Recipe> _bookmarkedRecipes = [];
 
   
 
@@ -327,8 +324,6 @@ Future<void> _toggleBookmarkRecipe(Recipe recipe) async {
 
       ProfilePage(
         userName: widget.userName,
-        favoriteRecipes: _favoriteRecipes,
-        bookmarkedRecipes: _bookmarkedRecipes,
       ),
 
     ];
@@ -489,14 +484,10 @@ class _AllergySelectorScreenState extends State<AllergySelectorScreen> {
 
 class ProfilePage extends StatefulWidget {
   final String userName;
-  final List<Recipe> bookmarkedRecipes;   // <-- add this
-  final List<Recipe> favoriteRecipes;
   
   const ProfilePage({
     super.key, 
-    this.userName = 'User', 
-    required this.bookmarkedRecipes,      // <-- constructor param
-    required this.favoriteRecipes,
+    this.userName = 'User',
   });
 
   @override
@@ -517,6 +508,8 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     _tabController.dispose();
     super.dispose();
   }
+
+
 
   void _showSignOutDialog(BuildContext context) {
     showDialog(
@@ -573,64 +566,64 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         children: <Widget>[
           const SizedBox(height: 30),
           // Profile Picture Circle
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF5aa454),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[300]!, width: 3),
-                ),
-                child: const Icon(
-                  Icons.person,
-                  size: 60,
-                  color: Colors.white,
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Upload profile picture feature coming soon!')),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final profilePictureUrl = snapshot.data?.data()?['profilePictureUrl'] as String?;
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF5aa454),
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF5aa454), width: 2),
+                      border: Border.all(color: Colors.grey[300]!, width: 3),
+                      image: profilePictureUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(profilePictureUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      size: 20,
-                      color: Color(0xFF5aa454),
+                    child: profilePictureUrl == null
+                        ? const Icon(
+                            Icons.person,
+                            size: 60,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFF5aa454), width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt,
+                          size: 20,
+                          color: Color(0xFF5aa454),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 15),
-          // User Name
-          // AUTH INFO (FirebaseAuth)
-          Text(
-            user?.email ?? 'No email',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          
-          const SizedBox(height: 20),
 
-          //  FIRESTORE PROFILE DETAILS
           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
                 .collection('users')
@@ -638,23 +631,29 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 .snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return const CircularProgressIndicator();
+                return const Text(
+                  'Loading...',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                );
               }
               final data = snapshot.data!.data();
-              if (data == null) {
-                return const Text('No profile data found');
-              }
+              final firstName = data?['firstName'] ?? 'User';
 
-              return Column(
-                children: [
-                  Text('First name: ${data['firstName'] ?? ''}'),
-                  Text('Last name: ${data['lastName'] ?? ''}'),
-                  Text('Phone: ${data['phone'] ?? ''}'),
-                ],
+              return Text(
+                firstName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               );
             },
           ),
-
+          
           const SizedBox(height: 20),
 
           //  Stats Row (Posts, Followers, Following)
@@ -701,6 +700,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             child: TabBarView(
               controller: _tabController,
               children: [
+                // Posts tab
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('recipes')
@@ -719,11 +719,44 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                     return _buildRecipeGrid(recipes);                  
                   },
                 ),
-                // Saved tab
-              _buildRecipeGrid(widget.bookmarkedRecipes.toList()), 
-              // Favorites tab
-              _buildRecipeGrid(widget.favoriteRecipes.toList()), 
+                // Saved (Bookmarks) tab
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .collection('bookmarks')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
+                    final recipes = snapshot.data!.docs
+                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .toList();
+
+                    return _buildRecipeGrid(recipes);                  
+                  },
+                ),
+                // Favorites tab
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .collection('favorites')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final recipes = snapshot.data!.docs
+                        .map((doc) => Recipe.fromMap(doc.data() as Map<String, dynamic>))
+                        .toList();
+
+                    return _buildRecipeGrid(recipes);                  
+                  },
+                ),
               ],
             ),
           ),
