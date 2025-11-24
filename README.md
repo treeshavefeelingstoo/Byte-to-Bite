@@ -8,7 +8,7 @@ Instead of spending time digging for recipes or figuring out what fits your diet
 - Jaislen Nolasco
 - Raegan Stair
 - London Banner
-- Khalil El-Abbassi
+- Khalil El-Abbassi 
 
 # Made with 
 - flutter
