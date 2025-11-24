@@ -764,71 +764,71 @@ Download Byte to Bite to see the full recipe.
           const Divider(height: 1, thickness: 1),
 ////check this
           Expanded(
-            child: _selectedFeed == 'Featured'
-                ? ListView.builder(
-                    itemCount: _currentRecipes.length,
-                    itemBuilder: (context, index) {
-                      final recipe = _currentRecipes[index];
-                      return _buildRecipeCard(recipe);
-                    },
-                  )
-                : StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(FirebaseAuth.instance.currentUser?.uid)
-                        .collection('recipes')
-                        .where('isArchived', isEqualTo: false)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
+  child: _selectedFeed == 'Featured'
+      ? ListView.builder(
+          itemCount: _currentRecipes.length,
+          itemBuilder: (context, index) {
+            final recipe = _currentRecipes[index];
+            return _buildRecipeCard(recipe, {}); // feed → empty map
+          },
+        )
+      : _selectedFeed == 'My Recipes'
+          ? StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(FirebaseAuth.instance.currentUser?.uid)
+                  .collection('recipes')
+                  .where('isArchived', isEqualTo: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.restaurant, size: 80, color: Colors.grey[400]),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No recipes yet',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Tap + to add your first recipe',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.restaurant, size: 80, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No recipes yet',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
                           ),
-                        );
-                      }
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap + to add your first recipe',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
 
-                      final userCreatedRecipes = snapshot.data!.docs
-                          .map((doc) => Recipe.fromMap(
-                                doc.data() as Map<String, dynamic>,
-                                id: doc.id,
-                              ))
-                          .toList();
+                final userCreatedRecipes = snapshot.data!.docs
+                    .map((doc) => Recipe.fromMap(
+                          doc.data() as Map<String, dynamic>,
+                          id: doc.id,
+                        ))
+                    .toList();
 
-                      return ListView.builder(
-                        itemCount: userCreatedRecipes.length,
-                        itemBuilder: (context, index) {
-                          final recipe = userCreatedRecipes[index];
-                          return _buildRecipeCard(recipe);
-                        },
-                      );
-                    },
-                  ),
-            //// check this
-            child: StreamBuilder<Map<DateTime, List<Meal>>>(
+                return ListView.builder(
+                  itemCount: userCreatedRecipes.length,
+                  itemBuilder: (context, index) {
+                    final recipe = userCreatedRecipes[index];
+                    return _buildRecipeCard(recipe, {}); // feed → empty map
+                  },
+                );
+              },
+            )
+          : StreamBuilder<Map<DateTime, List<Meal>>>(
               stream: mealPlanStream,
               builder: (context, snapshot) {
                 final mealPlan = snapshot.data ?? {};
@@ -836,7 +836,7 @@ Download Byte to Bite to see the full recipe.
                   itemCount: _currentRecipes.length,
                   itemBuilder: (context, index) {
                     final recipe = _currentRecipes[index];
-                    return _buildRecipeCard(recipe, mealPlan);
+                    return _buildRecipeCard(recipe, mealPlan); // planner → real map
                   },
                 );
               },

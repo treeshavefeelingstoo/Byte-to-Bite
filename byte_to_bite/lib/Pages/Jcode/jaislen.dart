@@ -96,43 +96,54 @@ class MealPlanRepo {
   }
 
   Future<void> addMeal({
-    required DateTime date,
-    required Meal meal,
-    required String mealType,
-  }) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      throw Exception("User not signed in");
-    }
+  required DateTime date,
+  required Meal meal,
+  required String mealType,
+}) async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) throw Exception("User not signed in");
 
-    final dayKey = normalizeDate(date).toIso8601String(); 
-    final weekStart = weekStartOf(date);
+  final dayKey = normalizeDate(date).toIso8601String();
 
-  //print("Saved meal for $dayKey under doc ${docRef.id}");
+  final docRef = _db.collection('mealPlans').doc(dayKey);
 
-    await docRef.set({
-      'userId': uid,
-      'weekStart': isoWeek(weekStart),
-      'days': {
-        dayKey: FieldValue.arrayUnion([
-          {...meal.toMap(), 'mealType': mealType},
-        ]),
-      },
-    }, SetOptions(merge: true));
-  }
+  await docRef.set({
+    'userId': uid,
+    'days': {
+      dayKey: FieldValue.arrayUnion([
+        {...meal.toMap(), 'mealType': mealType},
+      ]),
+    },
+  }, SetOptions(merge: true));
+}
 
-  Future<void> deleteMeal({
-    required String uid,
-    required DateTime date,
-    required Meal meal,
-  }) async {
-    final dayKey = isoDate(date);
-    final docRef = _db.collection('mealPlans').doc(mealPlanDocId(uid, date));
-    final mealMap = meal.toMap();
-    await docRef.set({
-      'days.$dayKey': FieldValue.arrayRemove([mealMap]),
-    }, SetOptions(merge: true));
-  }
+Future<void> deleteMeal({
+  required String uid,
+  required DateTime date,
+  required Meal meal,
+}) async {
+  final dayKey = normalizeDate(date).toIso8601String();
+  final docRef = _db.collection('mealPlans').doc(dayKey);
+
+  final snapshot = await docRef.get();
+  final data = snapshot.data();
+  if (data == null || data['days'] == null || data['days'][dayKey] == null) return;
+
+  final meals = List<Map<String, dynamic>>.from(data['days'][dayKey]);
+
+  // Remove the meal by matching key fields
+  final updatedMeals = meals.where((m) {
+    return !(m['name'] == meal.name &&
+             m['mealType'].toString().toLowerCase() == meal.mealType.toLowerCase() &&
+             List<String>.from(m['ingredients']).join(',') == meal.ingredients.join(','));
+  }).toList();
+
+  await docRef.set({
+    'days': {
+      dayKey: updatedMeals,
+    },
+  }, SetOptions(merge: true));
+}
 
   Future<void> addGroceries({
     required DateTime date,
@@ -889,7 +900,12 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                               onPressed: () async {
                                 await _deleteMeal(date, meal);
                                 Navigator.pop(context);
-                                _showMeals(date, mealPlan);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text("Deleted '${meal.name}'")),
+                                  );
+                                }
+
                               },
                             ),
                           ],
