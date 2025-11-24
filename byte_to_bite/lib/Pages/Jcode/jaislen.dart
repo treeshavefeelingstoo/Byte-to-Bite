@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
 
 class Meal {
   final String name;
@@ -405,6 +406,24 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
     await repo.deleteMeal(uid: user.uid, date: date, meal: meal);
   }
 
+  void _showMealIngredientSubstitution(Meal meal, DateTime date, Map<DateTime, List<Meal>> mealPlan) {
+    // Convert Meal to Recipe for the substitution page
+    final recipe = Recipe(
+      name: meal.name,
+      imageUrl: '', // Meals don't have images
+      hashtags: meal.restrictions.map((r) => '#$r').toList(),
+      ingredients: meal.ingredients,
+      author: 'Meal Prep',
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => IngredientSubstitutionPage(recipe: recipe),
+      ),
+    );
+  }
+
   void _showMeals(DateTime date, Map<DateTime, List<Meal>> mealPlan) {
     final key = normalizeDate(date);
     final meals = mealPlan[normalizeDate(date)] ?? [];
@@ -427,14 +446,31 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                         leading: Icon(meal.icon, color: meal.color),
                         title: Text("${meal.mealType.toUpperCase()} • ${meal.name}"),
                         subtitle: Text("Ingredients: ${meal.ingredients.join(", ")}"),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
-                            await _deleteMeal(date, meal);
-                            Navigator.pop(context);
-                            _showMeals(date, mealPlan);
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Color(0xFF479E36)),
+                              tooltip: 'Modify Ingredients',
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _showMealIngredientSubstitution(meal, date, mealPlan);
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () async {
+                                await _deleteMeal(date, meal);
+                                Navigator.pop(context);
+                                _showMeals(date, mealPlan);
+                              },
+                            ),
+                          ],
                         ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showMealIngredientSubstitution(meal, date, mealPlan);
+                        },
                       ),
                     );
                   },
