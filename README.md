@@ -28,6 +28,8 @@ Instead of spending time digging for recipes or figuring out what fits your diet
       ### flutter emulator --launch <device_name>
    8. Run the app
       ### flutter run
+* you may aslo do flutter run and then press 1 , to open in chrome as a second option *
+  
 # Emulator Troubleshooting Steps
 If you encounter any errors while running the emulator, try the following steps:
 
