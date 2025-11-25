@@ -103,7 +103,7 @@ class _HomePageState extends State<HomePage> {
         final meal = _generatedMeals[index];
         final date = currentWeekStart.add(Duration(days: dayOffset));
 
-        // 🔥 Persist to Firestore
+        // Persist to Firestore
         await repo.addMeal(date: date, meal: meal, mealType: meal.mealType);
         await repo.addGroceries(date: date, ingredients: meal.ingredients);
 

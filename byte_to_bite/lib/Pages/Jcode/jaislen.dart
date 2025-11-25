@@ -80,7 +80,6 @@ class MealPlanRepo {
         final data = doc.data();
         final days = (data['days'] as Map<String, dynamic>? ?? {});
         days.forEach((dateStr, mealsList) {
-          //print("Firestore day key: $dateStr → meals count ${(mealsList as List).length}");
 
           //  Parse the ISO string back into a DateTime
           final date = DateTime.parse(dateStr); // "2025-11-22T00:00:00.000"
@@ -951,7 +950,6 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
         final day = index - offset + 1;
         final date = DateTime(_currentMonth.year, _currentMonth.month, day);
         final meals = mealPlan[normalizeDate(date)] ?? [];
-        //print("Looking up ${normalizeDate(date)} → found ${meals.length} meals");
 
 
         return GestureDetector(
@@ -1011,7 +1009,6 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
       children: List.generate(7, (i) {
         final date = week.add(Duration(days: i));
         final meals = mealPlan[normalizeDate(date)] ?? [];
-        //print("Week cell ${normalizeDate(date)} → ${meals.length} meals");
 
 
         return Expanded(
@@ -1171,8 +1168,6 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
             return const Center(child: CircularProgressIndicator());
           }
           final mealPlan = snapshot.data!;
-          //print("MealPlan keys: ${mealPlan.keys}"); //debug
-
 
           return Center(
             child: Container(

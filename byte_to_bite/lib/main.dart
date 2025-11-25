@@ -258,6 +258,7 @@ class _DietaryAppState extends State<DietaryApp> {
       'hashtags': recipe.hashtags,
       'ingredients': recipe.ingredients,
       'author': recipe.author,
+      'authorId': recipe.authorId,
     });
   }
 }
@@ -282,6 +283,7 @@ Future<void> _toggleBookmarkRecipe(Recipe recipe) async {
       'hashtags': recipe.hashtags,
       'ingredients': recipe.ingredients,
       'author': recipe.author,
+      'authorId': recipe.authorId,
     });
   }
 }
@@ -1596,7 +1598,7 @@ class _UserRecipesPageState extends State<UserRecipesPage> {
           },
         );
       },
-    ), // 👈 close StreamBuilder properly here
+    ), // close StreamBuilder properly here
     floatingActionButton: FloatingActionButton(
       onPressed: () {
         Navigator.push(
