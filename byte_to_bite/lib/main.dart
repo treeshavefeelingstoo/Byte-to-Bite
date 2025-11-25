@@ -1598,7 +1598,7 @@ class _UserRecipesPageState extends State<UserRecipesPage> {
           },
         );
       },
-    ), // 👈 close StreamBuilder properly here
+    ), // close StreamBuilder properly here
     floatingActionButton: FloatingActionButton(
       onPressed: () {
         Navigator.push(
