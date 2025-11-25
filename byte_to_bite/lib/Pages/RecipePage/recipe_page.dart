@@ -1,11 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'add_recipe_page.dart';
 import 'search_page.dart';
+import 'dart:io';
+import 'dart:convert';
 
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
+import 'package:byte_to_bite/Pages/AuthorPage/author_page.dart';
 class Recipe {
   final String? id;
   final String name;
@@ -13,6 +18,7 @@ class Recipe {
   final List<String> hashtags;
   final List<String> ingredients;
   final String author;
+  final String? authorId;
   double rating;
   int ratingCount;
   bool isFavorite;
@@ -36,6 +42,7 @@ class Recipe {
     required this.hashtags,
     this.ingredients = const [],
     required this.author,
+    this.authorId,
     this.rating = 0.0,
     this.ratingCount = 0,
     this.isFavorite = false,
@@ -54,6 +61,7 @@ class Recipe {
       hashtags: List<String>.from(data['hashtags'] ?? []),
       ingredients: List<String>.from(data['ingredients'] ?? []),
       author: data['author'] ?? '',
+      authorId: data['authorId'] ?? data['createdBy'],
       rating: (data['rating'] ?? 0.0).toDouble(),
       ratingCount: data['ratingCount'] ?? 0,
       isFavorite: data['isFavorite'] ?? false,
@@ -72,6 +80,7 @@ class Recipe {
       'hashtags': hashtags,
       'ingredients': ingredients,
       'author': author,
+      'authorId': authorId,
       'rating': rating,
       'ratingCount': ratingCount,
       'isFavorite': isFavorite,
@@ -389,8 +398,7 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
   ];
 
   List<Recipe> get _currentRecipes {
-    // Keep hardcoded featured recipes for the Featured feed
-    return _selectedFeed == 'Featured' ? recipes : [];
+    return recipes;
   }
 
   @override
@@ -502,58 +510,65 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
     }
   }
 
-  void _showFeedSelector() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.star, color: Color(0xFF479E36)),
-                title: const Text(
-                  'Featured',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                trailing: _selectedFeed == 'Featured'
-                    ? const Icon(Icons.check, color: Color(0xFF479E36))
-                    : null,
-                onTap: () {
-                  setState(() {
-                    _selectedFeed = 'Featured';
-                  });
-                  Navigator.pop(context);
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.people, color: Color(0xFF479E36)),
-                title: const Text(
-                  'Users You\'re Following',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                trailing: _selectedFeed == 'Users You\'re Following'
-                    ? const Icon(Icons.check, color: Color(0xFF479E36))
-                    : null,
-                onTap: () {
-                  setState(() {
-                    _selectedFeed = 'Users You\'re Following';
-                  });
-                  Navigator.pop(context);
-                },
-              ),
-            ],
+  Widget _buildRecipeImage(String imageUrl) {
+    // Check if imageUrl is a local file path
+    if (imageUrl.startsWith('/') || imageUrl.contains('\\')) {
+      if (kIsWeb) {
+        // On web, treat local paths as network URLs
+        return Image.network(
+          imageUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildPlaceholderImage();
+          },
+        );
+      } else {
+        // On mobile/desktop, use File
+        final file = File(imageUrl);
+        if (file.existsSync()) {
+          return Image.file(
+            file,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return _buildPlaceholderImage();
+            },
+          );
+        }
+      }
+    }
+    
+    // Otherwise treat as network URL
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return _buildPlaceholderImage();
+      },
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Center(
+          child: CircularProgressIndicator(
+            value: loadingProgress.expectedTotalBytes != null
+                ? loadingProgress.cumulativeBytesLoaded /
+                    loadingProgress.expectedTotalBytes!
+                : null,
+            color: const Color(0xFF479E36),
           ),
         );
       },
     );
   }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      color: Colors.grey[300],
+      child: const Center(
+        child: Icon(Icons.restaurant, size: 60, color: Colors.grey),
+      ),
+    );
+  }
+
+
 
   void _showRatingDialog(Recipe recipe) {
     double userRating = 0;
@@ -755,33 +770,6 @@ Download Byte to Bite to see the full recipe.
       ),
       body: Column(
         children: [
-          GestureDetector(
-            onTap: () {
-              _showFeedSelector();
-            },
-            child: Container(
-              width: double.infinity,
-              color: Colors.green[700],
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _selectedFeed,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 24),
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1, thickness: 1),
-////check this
           Expanded(
   child: _selectedFeed == 'Featured'
       ? ListView.builder(
@@ -877,11 +865,6 @@ Download Byte to Bite to see the full recipe.
   }
 
   Widget _buildRecipeCard(Recipe recipe, Map<DateTime, List<Meal>> mealPlan) {
-      final today = DateTime.now();
-      final normalizedToday = DateTime(today.year, today.month, today.day);
-      final todayMeals = mealPlan[normalizedToday] ?? [];
-      final isScheduledToday = todayMeals.any((meal) => meal.name == recipe.name);
-    
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
       elevation: 0,
@@ -903,11 +886,31 @@ Download Byte to Bite to see the full recipe.
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  recipe.author,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AuthorPage(
+                          authorName: recipe.author,
+                          authorId: recipe.authorId,
+                        ),
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    recipe.author,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -947,10 +950,7 @@ Download Byte to Bite to see the full recipe.
             width: double.infinity,
             height: 300,
             color: Colors.grey[200],
-            child: Image.network(
-              recipe.imageUrl,
-              fit: BoxFit.cover,
-            ),
+            child: _buildRecipeImage(recipe.imageUrl),
           ),
 
           // Buttons Row (favorites, likes, dislikes, comments, bookmark)
@@ -1273,6 +1273,7 @@ class IngredientSubstitutionPage extends StatefulWidget {
 class _IngredientSubstitutionPageState extends State<IngredientSubstitutionPage> {
   late List<String> modifiedIngredients;
   final Map<int, String> substitutions = {};
+  late List<String> originalIngredients;
 
   // Common ingredient substitutions
   final Map<String, List<String>> substitutionOptions = {
@@ -1296,7 +1297,57 @@ class _IngredientSubstitutionPageState extends State<IngredientSubstitutionPage>
   @override
   void initState() {
     super.initState();
+    originalIngredients = List.from(widget.recipe.ingredients);
     modifiedIngredients = List.from(widget.recipe.ingredients);
+    _loadSavedSubstitutions();
+  }
+
+  // Load saved substitutions from SharedPreferences
+  Future<void> _loadSavedSubstitutions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'substitutions_${widget.recipe.name}';
+    final savedData = prefs.getString(key);
+    
+    if (savedData != null) {
+      try {
+        final Map<String, dynamic> data = json.decode(savedData);
+        setState(() {
+          // Load substitutions
+          final savedSubs = data['substitutions'] as Map<String, dynamic>?;
+          if (savedSubs != null) {
+            savedSubs.forEach((key, value) {
+              substitutions[int.parse(key)] = value.toString();
+            });
+          }
+          
+          // Load modified ingredients
+          final savedIngredients = data['modifiedIngredients'] as List<dynamic>?;
+          if (savedIngredients != null) {
+            modifiedIngredients = List<String>.from(savedIngredients);
+          }
+        });
+      } catch (e) {
+        // If there's an error loading, just use the original ingredients
+        print('Error loading substitutions: $e');
+      }
+    }
+  }
+
+  // Save substitutions to SharedPreferences
+  Future<void> _saveSubstitutions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'substitutions_${widget.recipe.name}';
+    
+    if (substitutions.isEmpty) {
+      // If no substitutions, remove the saved data
+      await prefs.remove(key);
+    } else {
+      final data = {
+        'substitutions': substitutions.map((k, v) => MapEntry(k.toString(), v)),
+        'modifiedIngredients': modifiedIngredients,
+      };
+      await prefs.setString(key, json.encode(data));
+    }
   }
 
   List<String> _getSuggestedSubstitutions(String ingredient) {
@@ -1438,6 +1489,9 @@ class _IngredientSubstitutionPageState extends State<IngredientSubstitutionPage>
       substitutions[index] = substitute;
     });
 
+    // Auto-save after applying substitution
+    _saveSubstitutions();
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Substituted with $substitute'),
@@ -1449,9 +1503,12 @@ class _IngredientSubstitutionPageState extends State<IngredientSubstitutionPage>
 
   void _resetIngredient(int index) {
     setState(() {
-      modifiedIngredients[index] = widget.recipe.ingredients[index];
+      modifiedIngredients[index] = originalIngredients[index];
       substitutions.remove(index);
     });
+
+    // Auto-save after resetting ingredient
+    _saveSubstitutions();
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1464,9 +1521,12 @@ class _IngredientSubstitutionPageState extends State<IngredientSubstitutionPage>
 
   void _resetAllIngredients() {
     setState(() {
-      modifiedIngredients = List.from(widget.recipe.ingredients);
+      modifiedIngredients = List.from(originalIngredients);
       substitutions.clear();
     });
+
+    // Auto-save (clear) after resetting all ingredients
+    _saveSubstitutions();
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1584,11 +1644,52 @@ class _IngredientSubstitutionPageState extends State<IngredientSubstitutionPage>
         foregroundColor: Colors.white,
         actions: [
           if (substitutions.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Reset All',
-              onPressed: _resetAllIngredients,
+            TextButton.icon(
+              icon: const Icon(Icons.restore, color: Colors.white, size: 20),
+              label: const Text(
+                'Original Recipe',
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: const Text(
+                        'Revert to Original Recipe',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF479E36),
+                        ),
+                      ),
+                      content: Text(
+                        'This will remove all ${substitutions.length} substitution${substitutions.length > 1 ? 's' : ''} and restore the original recipe. This action cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _resetAllIngredients();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                          ),
+                          child: const Text(
+                            'Revert to Original',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
             ),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.save),
             tooltip: 'Save Modified Recipe',
@@ -1671,7 +1772,7 @@ class _IngredientSubstitutionPageState extends State<IngredientSubstitutionPage>
               itemBuilder: (context, index) {
                 final ingredient = modifiedIngredients[index];
                 final isModified = substitutions.containsKey(index);
-                final originalIngredient = widget.recipe.ingredients[index];
+                final originalIngredient = originalIngredients[index];
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),

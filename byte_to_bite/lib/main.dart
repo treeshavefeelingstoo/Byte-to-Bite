@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -257,6 +258,7 @@ class _DietaryAppState extends State<DietaryApp> {
       'hashtags': recipe.hashtags,
       'ingredients': recipe.ingredients,
       'author': recipe.author,
+      'authorId': recipe.authorId,
     });
   }
 }
@@ -281,6 +283,7 @@ Future<void> _toggleBookmarkRecipe(Recipe recipe) async {
       'hashtags': recipe.hashtags,
       'ingredients': recipe.ingredients,
       'author': recipe.author,
+      'authorId': recipe.authorId,
     });
   }
 }
@@ -588,14 +591,18 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                       color: const Color(0xFF5aa454),
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.grey[300]!, width: 3),
-                      image: profilePicturePath != null && File(profilePicturePath).existsSync()
+                      image: profilePicturePath != null && 
+                             (kIsWeb || File(profilePicturePath).existsSync())
                           ? DecorationImage(
-                              image: FileImage(File(profilePicturePath)),
+                              image: kIsWeb
+                                  ? NetworkImage(profilePicturePath) as ImageProvider
+                                  : FileImage(File(profilePicturePath)),
                               fit: BoxFit.cover,
                             )
                           : null,
                     ),
-                    child: profilePicturePath == null || !File(profilePicturePath).existsSync()
+                    child: profilePicturePath == null || 
+                           (!kIsWeb && !File(profilePicturePath).existsSync())
                         ? const Icon(
                             Icons.person,
                             size: 60,
@@ -945,6 +952,70 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
+  Widget _buildRecipeImageForProfile(String imageUrl) {
+    // Check if imageUrl is a local file path
+    if (imageUrl.startsWith('/') || imageUrl.contains('\\')) {
+      if (kIsWeb) {
+        // On web, treat local paths as network URLs (blob URLs)
+        return Image.network(
+          imageUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              color: Colors.grey[300],
+              child: const Center(
+                child: Icon(Icons.restaurant, size: 40, color: Colors.grey),
+              ),
+            );
+          },
+        );
+      } else {
+        // On mobile/desktop, use File
+        final file = File(imageUrl);
+        if (file.existsSync()) {
+          return Image.file(
+            file,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey[300],
+                child: const Center(
+                  child: Icon(Icons.restaurant, size: 40, color: Colors.grey),
+                ),
+              );
+            },
+          );
+        }
+      }
+    }
+    
+    // Otherwise treat as network URL
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          color: Colors.grey[300],
+          child: const Center(
+            child: Icon(Icons.restaurant, size: 40, color: Colors.grey),
+          ),
+        );
+      },
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Center(
+          child: CircularProgressIndicator(
+            value: loadingProgress.expectedTotalBytes != null
+                ? loadingProgress.cumulativeBytesLoaded /
+                    loadingProgress.expectedTotalBytes!
+                : null,
+            color: const Color(0xFF5aa454),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildRecipeGrid(List<Recipe> recipes, {bool isUserPosts = false, bool isSaved = false, bool isFavorites = false}){
     if (recipes.isEmpty) {
       return Center(
@@ -986,30 +1057,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 decoration: BoxDecoration(
                   color: Colors.grey[300],
                 ),
-                child: Image.network(
-                  recipe.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[300],
-                      child: const Center(
-                        child: Icon(Icons.restaurant, size: 40, color: Colors.grey),
-                      ),
-                    );
-                  },
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Center(
-                      child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                loadingProgress.expectedTotalBytes!
-                            : null,
-                        color: const Color(0xFF5aa454),
-                      ),
-                    );
-                  },
-                ),
+                child: _buildRecipeImageForProfile(recipe.imageUrl),
               ),
               if (isUserPosts)
                 Positioned(
@@ -1311,18 +1359,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               Container(
                 width: double.infinity,
                 height: 250,
-                child: Image.network(
-                  recipe.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[300],
-                      child: const Center(
-                        child: Icon(Icons.restaurant, size: 60, color: Colors.grey),
-                      ),
-                    );
-                  },
-                ),
+                child: _buildRecipeImageForProfile(recipe.imageUrl),
               ),
               Padding(
                 padding: const EdgeInsets.all(16.0),
