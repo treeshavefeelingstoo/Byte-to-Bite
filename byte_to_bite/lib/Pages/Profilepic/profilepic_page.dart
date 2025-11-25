@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -57,17 +58,25 @@ class _ProfilePicturePageState extends State<ProfilePicturePage> {
     });
 
     try {
-      // Get the app's document directory
-      final directory = await getApplicationDocumentsDirectory();
-      final String fileName = 'profile_picture.jpg';
-      final String filePath = '${directory.path}/$fileName';
+      String imagePath;
+      
+      if (kIsWeb) {
+        // On web, use the blob URL directly
+        imagePath = _selectedImage!.path;
+      } else {
+        // On mobile/desktop, copy to app directory
+        final directory = await getApplicationDocumentsDirectory();
+        final String fileName = 'profile_picture.jpg';
+        final String filePath = '${directory.path}/$fileName';
 
-      // Copy the selected image to the app's directory
-      final File localImage = await _selectedImage!.copy(filePath);
+        // Copy the selected image to the app's directory
+        final File localImage = await _selectedImage!.copy(filePath);
+        imagePath = localImage.path;
+      }
 
       // Save the file path to shared preferences
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('profile_picture_path', localImage.path);
+      await prefs.setString('profile_picture_path', imagePath);
 
       if (!mounted) return;
 
@@ -170,7 +179,9 @@ class _ProfilePicturePageState extends State<ProfilePicturePage> {
                     ),
                     image: _selectedImage != null
                         ? DecorationImage(
-                            image: FileImage(_selectedImage!),
+                            image: kIsWeb
+                                ? NetworkImage(_selectedImage!.path) as ImageProvider
+                                : FileImage(_selectedImage!),
                             fit: BoxFit.cover,
                           )
                         : null,
