@@ -22,6 +22,306 @@ class _AuthorProfilePageState extends State<AuthorPage> {
   int recipeCount = 0;
   int totalLikes = 0;
   double averageRating = 0.0;
+  
+  // Hardcoded recipes for each author
+  final Map<String, List<Recipe>> _authorRecipes = {
+    'HealthyEats': [
+      Recipe(
+        name: 'Vegan Bowl',
+        imageUrl: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800',
+        hashtags: ['#vegan', '#glutenfree', '#healthy', '#plantbased'],
+        ingredients: [
+          'Quinoa',
+          'Mixed greens',
+          'Cherry tomatoes',
+          'Avocado',
+          'Chickpeas',
+          'Lemon tahini dressing',
+          'Sunflower seeds',
+        ],
+        author: 'HealthyEats',
+      ),
+      Recipe(
+        name: 'Green Smoothie Bowl',
+        imageUrl: 'https://images.unsplash.com/photo-1590301157890-4810ed352733?w=800',
+        hashtags: ['#vegan', '#glutenfree', '#smoothie', '#breakfast'],
+        ingredients: [
+          'Frozen banana',
+          'Spinach',
+          'Almond milk',
+          'Chia seeds',
+          'Fresh berries',
+          'Granola',
+          'Coconut flakes',
+        ],
+        author: 'HealthyEats',
+      ),
+      Recipe(
+        name: 'Quinoa Power Bowl',
+        imageUrl: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?w=800',
+        hashtags: ['#vegan', '#glutenfree', '#vegetarian', '#healthy'],
+        ingredients: [
+          'Cooked quinoa',
+          'Roasted sweet potato',
+          'Kale',
+          'Chickpeas',
+          'Tahini dressing',
+          'Hemp seeds',
+          'Lemon juice',
+        ],
+        author: 'HealthyEats',
+      ),
+    ],
+    'FitMeals': [
+      Recipe(
+        name: 'Grilled Chicken Salad',
+        imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800',
+        hashtags: ['#glutenfree', '#keto', '#lowcarb', '#protein'],
+        ingredients: [
+          'Grilled chicken breast',
+          'Romaine lettuce',
+          'Cherry tomatoes',
+          'Cucumber',
+          'Red onion',
+          'Feta cheese',
+          'Olive oil and lemon dressing',
+        ],
+        author: 'FitMeals',
+      ),
+      Recipe(
+        name: 'Salmon with Veggies',
+        imageUrl: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800',
+        hashtags: ['#keto', '#paleo', '#glutenfree', '#omega3'],
+        ingredients: [
+          'Fresh salmon fillet',
+          'Asparagus',
+          'Bell peppers',
+          'Olive oil',
+          'Garlic',
+          'Lemon',
+          'Fresh herbs',
+        ],
+        author: 'FitMeals',
+      ),
+      Recipe(
+        name: 'Greek Yogurt Parfait',
+        imageUrl: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800',
+        hashtags: ['#glutenfree', '#protein', '#breakfast', '#vegetarian'],
+        ingredients: [
+          'Greek yogurt',
+          'Fresh berries',
+          'Honey',
+          'Granola',
+          'Sliced almonds',
+          'Chia seeds',
+          'Mint leaves',
+        ],
+        author: 'FitMeals',
+      ),
+    ],
+    'GreenKitchen': [
+      Recipe(
+        name: 'Quinoa Power Bowl',
+        imageUrl: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?w=800',
+        hashtags: ['#vegan', '#glutenfree', '#vegetarian', '#healthy'],
+        ingredients: [
+          'Cooked quinoa',
+          'Roasted sweet potato',
+          'Kale',
+          'Chickpeas',
+          'Tahini dressing',
+          'Hemp seeds',
+          'Lemon juice',
+        ],
+        author: 'GreenKitchen',
+      ),
+      Recipe(
+        name: 'Zucchini Noodles',
+        imageUrl: 'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=800',
+        hashtags: ['#glutenfree', '#vegan', '#lowcarb', '#paleo'],
+        ingredients: [
+          'Zucchini (spiralized)',
+          'Cherry tomatoes',
+          'Garlic',
+          'Olive oil',
+          'Fresh basil',
+          'Pine nuts',
+          'Nutritional yeast',
+        ],
+        author: 'GreenKitchen',
+      ),
+    ],
+    'SeafoodLover': [
+      Recipe(
+        name: 'Salmon with Veggies',
+        imageUrl: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=800',
+        hashtags: ['#keto', '#paleo', '#glutenfree', '#omega3'],
+        ingredients: [
+          'Fresh salmon fillet',
+          'Asparagus',
+          'Bell peppers',
+          'Olive oil',
+          'Garlic',
+          'Lemon',
+          'Fresh herbs',
+        ],
+        author: 'SeafoodLover',
+      ),
+    ],
+    'HealthySwaps': [
+      Recipe(
+        name: 'Cauliflower Pizza',
+        imageUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800',
+        hashtags: ['#glutenfree', '#lowcarb', '#keto', '#vegetarian'],
+        ingredients: [
+          'Cauliflower rice',
+          'Mozzarella cheese',
+          'Egg',
+          'Tomato sauce',
+          'Fresh basil',
+          'Cherry tomatoes',
+          'Italian seasoning',
+        ],
+        author: 'HealthySwaps',
+      ),
+    ],
+    'MorningBoost': [
+      Recipe(
+        name: 'Green Smoothie Bowl',
+        imageUrl: 'https://images.unsplash.com/photo-1590301157890-4810ed352733?w=800',
+        hashtags: ['#vegan', '#glutenfree', '#smoothie', '#breakfast'],
+        ingredients: [
+          'Frozen banana',
+          'Spinach',
+          'Almond milk',
+          'Chia seeds',
+          'Fresh berries',
+          'Granola',
+          'Coconut flakes',
+        ],
+        author: 'MorningBoost',
+      ),
+    ],
+    'PastaAlternatives': [
+      Recipe(
+        name: 'Zucchini Noodles',
+        imageUrl: 'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=800',
+        hashtags: ['#glutenfree', '#vegan', '#lowcarb', '#paleo'],
+        ingredients: [
+          'Zucchini (spiralized)',
+          'Cherry tomatoes',
+          'Garlic',
+          'Olive oil',
+          'Fresh basil',
+          'Pine nuts',
+          'Nutritional yeast',
+        ],
+        author: 'PastaAlternatives',
+      ),
+    ],
+    'YogurtLovers': [
+      Recipe(
+        name: 'Greek Yogurt Parfait',
+        imageUrl: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800',
+        hashtags: ['#glutenfree', '#protein', '#breakfast', '#vegetarian'],
+        ingredients: [
+          'Greek yogurt',
+          'Fresh berries',
+          'Honey',
+          'Granola',
+          'Sliced almonds',
+          'Chia seeds',
+          'Mint leaves',
+        ],
+        author: 'YogurtLovers',
+      ),
+    ],
+    'CookingWithLove': [
+      Recipe(
+        name: 'Homemade Pasta Bake',
+        imageUrl: 'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=800',
+        hashtags: ['#pasta', '#comfort', '#homemade', '#vegetarian'],
+        ingredients: [
+          'Pasta',
+          'Marinara sauce',
+          'Mozzarella cheese',
+          'Ricotta cheese',
+          'Parmesan cheese',
+          'Italian herbs',
+          'Garlic',
+        ],
+        author: 'CookingWithLove',
+      ),
+    ],
+    'SpiceKitchen': [
+      Recipe(
+        name: 'Spicy Thai Curry',
+        imageUrl: 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=800',
+        hashtags: ['#thai', '#spicy', '#vegan', '#curry'],
+        ingredients: [
+          'Coconut milk',
+          'Red curry paste',
+          'Tofu',
+          'Bell peppers',
+          'Bamboo shoots',
+          'Thai basil',
+          'Lime juice',
+        ],
+        author: 'SpiceKitchen',
+      ),
+    ],
+    'FitnessFoodie': [
+      Recipe(
+        name: 'Chocolate Protein Shake',
+        imageUrl: 'https://images.unsplash.com/photo-1579954115545-a95591f28bfc?w=800',
+        hashtags: ['#protein', '#chocolate', '#shake', '#postworkout'],
+        ingredients: [
+          'Protein powder',
+          'Banana',
+          'Almond milk',
+          'Cocoa powder',
+          'Peanut butter',
+          'Ice cubes',
+          'Honey',
+        ],
+        author: 'FitnessFoodie',
+      ),
+    ],
+    'BrunchLover': [
+      Recipe(
+        name: 'Avocado Toast',
+        imageUrl: 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=800',
+        hashtags: ['#breakfast', '#avocado', '#healthy', '#vegetarian'],
+        ingredients: [
+          'Whole grain bread',
+          'Ripe avocado',
+          'Lemon juice',
+          'Cherry tomatoes',
+          'Red pepper flakes',
+          'Sea salt',
+          'Olive oil',
+        ],
+        author: 'BrunchLover',
+      ),
+    ],
+    'TacoTuesday': [
+      Recipe(
+        name: 'Beef Tacos',
+        imageUrl: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800',
+        hashtags: ['#mexican', '#tacos', '#beef', '#dinner'],
+        ingredients: [
+          'Ground beef',
+          'Taco shells',
+          'Lettuce',
+          'Tomatoes',
+          'Cheese',
+          'Sour cream',
+          'Taco seasoning',
+        ],
+        author: 'TacoTuesday',
+      ),
+    ],
+  };
 
   @override
   void initState() {
@@ -30,6 +330,18 @@ class _AuthorProfilePageState extends State<AuthorPage> {
   }
 
   Future<void> _loadAuthorStats() async {
+    // For hardcoded authors, use hardcoded recipes
+    if (_authorRecipes.containsKey(widget.authorName)) {
+      final recipes = _authorRecipes[widget.authorName]!;
+      setState(() {
+        recipeCount = recipes.length;
+        totalLikes = 0; // Can be adjusted if needed
+        averageRating = 0.0; // Can be adjusted if needed
+      });
+      return;
+    }
+    
+    // For other authors, try Firebase
     try {
       // Query all users to find recipes by this author name
       final usersSnapshot = await FirebaseFirestore.instance.collection('users').get();
@@ -241,65 +553,116 @@ class _AuthorProfilePageState extends State<AuthorPage> {
           ),
           // Recipes Grid
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _getAuthorRecipesStream(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.restaurant, size: 80, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No recipes yet',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                final recipes = snapshot.data!.docs
-                    .map((doc) => Recipe.fromMap(
-                          doc.data() as Map<String, dynamic>,
-                          id: doc.id,
-                        ))
-                    .toList();
-
-                return GridView.builder(
-                  padding: const EdgeInsets.all(2),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 2,
-                    mainAxisSpacing: 2,
-                  ),
-                  itemCount: recipes.length,
-                  itemBuilder: (context, index) {
-                    final recipe = recipes[index];
-                    return GestureDetector(
-                      onTap: () => _showRecipeDetail(recipe),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[300],
-                        ),
-                        child: _buildRecipeImage(recipe.imageUrl),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+            child: _buildRecipesGrid(),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRecipesGrid() {
+    // Check if this is a hardcoded author
+    if (_authorRecipes.containsKey(widget.authorName)) {
+      final recipes = _authorRecipes[widget.authorName]!;
+      
+      if (recipes.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.restaurant, size: 80, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                'No recipes yet',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      
+      return GridView.builder(
+        padding: const EdgeInsets.all(2),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 2,
+          mainAxisSpacing: 2,
+        ),
+        itemCount: recipes.length,
+        itemBuilder: (context, index) {
+          final recipe = recipes[index];
+          return GestureDetector(
+            onTap: () => _showRecipeDetail(recipe),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+              ),
+              child: _buildRecipeImage(recipe.imageUrl),
+            ),
+          );
+        },
+      );
+    }
+    
+    // For non-hardcoded authors, use Firebase StreamBuilder
+    return StreamBuilder<QuerySnapshot>(
+      stream: _getAuthorRecipesStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.restaurant, size: 80, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text(
+                  'No recipes yet',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final recipes = snapshot.data!.docs
+            .map((doc) => Recipe.fromMap(
+                  doc.data() as Map<String, dynamic>,
+                  id: doc.id,
+                ))
+            .toList();
+
+        return GridView.builder(
+          padding: const EdgeInsets.all(2),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+          ),
+          itemCount: recipes.length,
+          itemBuilder: (context, index) {
+            final recipe = recipes[index];
+            return GestureDetector(
+              onTap: () => _showRecipeDetail(recipe),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                ),
+                child: _buildRecipeImage(recipe.imageUrl),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

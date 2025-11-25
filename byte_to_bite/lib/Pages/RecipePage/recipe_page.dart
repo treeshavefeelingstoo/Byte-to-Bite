@@ -405,6 +405,7 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
   void initState() {
     super.initState();
     _loadFavoritesAndBookmarks();
+    _loadCommentsAndVotes();
     final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid != null) {
     mealPlanStream = FirebaseFirestore.instance
@@ -460,6 +461,59 @@ class _RecipeFeedPageState extends State<RecipeFeedPage> {
         recipe.isBookmarked = bookmarkNames.contains(recipe.name);
       }
     });
+  }
+
+  // Load comments and votes from SharedPreferences
+  Future<void> _loadCommentsAndVotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    setState(() {
+      for (var recipe in recipes) {
+        _loadRecipeData(prefs, recipe);
+      }
+      for (var recipe in userRecipes) {
+        _loadRecipeData(prefs, recipe);
+      }
+    });
+  }
+
+  void _loadRecipeData(SharedPreferences prefs, Recipe recipe) {
+    final key = 'recipe_${recipe.name}';
+    
+    // Load comments
+    final commentsJson = prefs.getString('${key}_comments');
+    if (commentsJson != null) {
+      try {
+        final List<dynamic> commentsList = json.decode(commentsJson);
+        recipe.comments = commentsList
+            .map((c) => Map<String, String>.from(c))
+            .toList();
+      } catch (e) {
+        print('Error loading comments for ${recipe.name}: $e');
+      }
+    }
+    
+    // Load likes/dislikes
+    recipe.likes = prefs.getInt('${key}_likes') ?? recipe.likes;
+    recipe.dislikes = prefs.getInt('${key}_dislikes') ?? recipe.dislikes;
+    recipe.isLiked = prefs.getBool('${key}_isLiked') ?? false;
+    recipe.isDisliked = prefs.getBool('${key}_isDisliked') ?? false;
+  }
+
+  // Save comments and votes to SharedPreferences
+  Future<void> _saveRecipeData(Recipe recipe) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'recipe_${recipe.name}';
+    
+    // Save comments
+    final commentsJson = json.encode(recipe.comments);
+    await prefs.setString('${key}_comments', commentsJson);
+    
+    // Save likes/dislikes
+    await prefs.setInt('${key}_likes', recipe.likes);
+    await prefs.setInt('${key}_dislikes', recipe.dislikes);
+    await prefs.setBool('${key}_isLiked', recipe.isLiked);
+    await prefs.setBool('${key}_isDisliked', recipe.isDisliked);
   }
 
   Future<void> _toggleFavorite(Recipe recipe) async {
@@ -1012,6 +1066,7 @@ Download Byte to Bite to see the full recipe.
                             }
                           }
                         });
+                        _saveRecipeData(recipe);
                       },
                     ),
                     Text(recipe.likes.toString()),
@@ -1042,6 +1097,7 @@ Download Byte to Bite to see the full recipe.
                             }
                           }
                         });
+                        _saveRecipeData(recipe);
                       },
                     ),
                     Text(recipe.dislikes.toString()),
@@ -1250,6 +1306,7 @@ Download Byte to Bite to see the full recipe.
                   });
 
                   controller.clear();
+                  _saveRecipeData(recipe);
                 },
               ),
             ],
