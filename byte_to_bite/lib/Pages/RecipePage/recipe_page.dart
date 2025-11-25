@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'add_recipe_page.dart';
+import 'search_page.dart';
 
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
 class Recipe {
@@ -90,7 +91,7 @@ class RecipeFeedPage extends StatefulWidget {
   final Function(Recipe)? onToggleFavorite;
   final Function(Recipe)? onToggleBookmark;
 
-  const RecipeFeedPage({
+const RecipeFeedPage({
     super.key,
     this.userName = 'User',
     this.favoriteRecipeNamesStream,
@@ -105,6 +106,7 @@ class RecipeFeedPage extends StatefulWidget {
 
 class _RecipeFeedPageState extends State<RecipeFeedPage> {
   String _selectedFeed = 'Featured';
+  List<String> searchTags = ['#all'];
 
   late Stream<Map<DateTime, List<Meal>>> mealPlanStream;
 
@@ -732,6 +734,23 @@ Download Byte to Bite to see the full recipe.
               }
             },
           ),
+        IconButton(
+            icon: const Icon(Icons.search, color: Colors.white, size: 28),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SearchRecipePage(),
+                ),
+              );
+              
+              // Refresh the feed  to update recipes
+                setState(() {
+                  searchTags = result;
+                  // This will trigger a rebuild and refresh the recipes
+                });
+            },
+          ),
         ],
       ),
       body: Column(
@@ -768,8 +787,18 @@ Download Byte to Bite to see the full recipe.
       ? ListView.builder(
           itemCount: _currentRecipes.length,
           itemBuilder: (context, index) {
+            bool hashtagInRecipe = false;
             final recipe = _currentRecipes[index];
-            return _buildRecipeCard(recipe, {}); // feed → empty map
+            for (var tag in recipe.hashtags){
+              for (var searchTag in searchTags){
+                if (tag == searchTag || searchTag == '#all'){
+                  hashtagInRecipe = true;
+              }
+              }
+              if (hashtagInRecipe == true){
+                return _buildRecipeCard(recipe, {}); // feed → empty map
+              }
+            }
           },
         )
       : _selectedFeed == 'My Recipes'
@@ -888,7 +917,6 @@ Download Byte to Bite to see the full recipe.
                   icon: const Icon(Icons.star_border, size: 28),
                   onPressed: () => _showRatingDialog(recipe),
                 ),
-
                 // 3-dot menu with Share
                 PopupMenuButton<String>(
                   onSelected: (value) {
