@@ -5,10 +5,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'add_recipe_page.dart';
+import 'search_page.dart';
 import 'dart:io';
 import 'dart:convert';
 
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
+import 'package:byte_to_bite/Pages/AuthorPage/author_page.dart';
 class Recipe {
   final String? id;
   final String name;
@@ -16,6 +18,7 @@ class Recipe {
   final List<String> hashtags;
   final List<String> ingredients;
   final String author;
+  final String? authorId;
   double rating;
   int ratingCount;
   bool isFavorite;
@@ -39,6 +42,7 @@ class Recipe {
     required this.hashtags,
     this.ingredients = const [],
     required this.author,
+    this.authorId,
     this.rating = 0.0,
     this.ratingCount = 0,
     this.isFavorite = false,
@@ -57,6 +61,7 @@ class Recipe {
       hashtags: List<String>.from(data['hashtags'] ?? []),
       ingredients: List<String>.from(data['ingredients'] ?? []),
       author: data['author'] ?? '',
+      authorId: data['authorId'] ?? data['createdBy'],
       rating: (data['rating'] ?? 0.0).toDouble(),
       ratingCount: data['ratingCount'] ?? 0,
       isFavorite: data['isFavorite'] ?? false,
@@ -75,6 +80,7 @@ class Recipe {
       'hashtags': hashtags,
       'ingredients': ingredients,
       'author': author,
+      'authorId': authorId,
       'rating': rating,
       'ratingCount': ratingCount,
       'isFavorite': isFavorite,
@@ -94,7 +100,7 @@ class RecipeFeedPage extends StatefulWidget {
   final Function(Recipe)? onToggleFavorite;
   final Function(Recipe)? onToggleBookmark;
 
-  const RecipeFeedPage({
+const RecipeFeedPage({
     super.key,
     this.userName = 'User',
     this.favoriteRecipeNamesStream,
@@ -108,6 +114,9 @@ class RecipeFeedPage extends StatefulWidget {
 }
 
 class _RecipeFeedPageState extends State<RecipeFeedPage> {
+  String _selectedFeed = 'Featured';
+  List<String> searchTags = ['#all'];
+
   late Stream<Map<DateTime, List<Meal>>> mealPlanStream;
 
   // Featured recipes
@@ -794,16 +803,113 @@ Download Byte to Bite to see the full recipe.
               }
             },
           ),
+        IconButton(
+            icon: const Icon(Icons.search, color: Colors.white, size: 28),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SearchRecipePage(),
+                ),
+              );
+              
+              // Refresh the feed  to update recipes
+                setState(() {
+                  searchTags = result;
+                  // This will trigger a rebuild and refresh the recipes
+                });
+            },
+          ),
         ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              itemCount: _currentRecipes.length,
-              itemBuilder: (context, index) {
-                final recipe = _currentRecipes[index];
-                return _buildRecipeCard(recipe, {});
+  child: _selectedFeed == 'Featured'
+      ? ListView.builder(
+          itemCount: _currentRecipes.length,
+          itemBuilder: (context, index) {
+            bool hashtagInRecipe = false;
+            final recipe = _currentRecipes[index];
+            for (var tag in recipe.hashtags){
+              for (var searchTag in searchTags){
+                if (tag == searchTag || searchTag == '#all'){
+                  hashtagInRecipe = true;
+              }
+              }
+              if (hashtagInRecipe == true){
+                return _buildRecipeCard(recipe, {}); // feed → empty map
+              }
+            }
+          },
+        )
+      : _selectedFeed == 'My Recipes'
+          ? StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(FirebaseAuth.instance.currentUser?.uid)
+                  .collection('recipes')
+                  .where('isArchived', isEqualTo: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.restaurant, size: 80, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No recipes yet',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap + to add your first recipe',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final userCreatedRecipes = snapshot.data!.docs
+                    .map((doc) => Recipe.fromMap(
+                          doc.data() as Map<String, dynamic>,
+                          id: doc.id,
+                        ))
+                    .toList();
+
+                return ListView.builder(
+                  itemCount: userCreatedRecipes.length,
+                  itemBuilder: (context, index) {
+                    final recipe = userCreatedRecipes[index];
+                    return _buildRecipeCard(recipe, {}); // feed → empty map
+                  },
+                );
+              },
+            )
+          : StreamBuilder<Map<DateTime, List<Meal>>>(
+              stream: mealPlanStream,
+              builder: (context, snapshot) {
+                final mealPlan = snapshot.data ?? {};
+                return ListView.builder(
+                  itemCount: _currentRecipes.length,
+                  itemBuilder: (context, index) {
+                    final recipe = _currentRecipes[index];
+                    return _buildRecipeCard(recipe, mealPlan); // planner → real map
+                  },
+                );
               },
             ),
           ),
@@ -834,11 +940,31 @@ Download Byte to Bite to see the full recipe.
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  recipe.author,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AuthorPage(
+                          authorName: recipe.author,
+                          authorId: recipe.authorId,
+                        ),
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    recipe.author,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -848,7 +974,6 @@ Download Byte to Bite to see the full recipe.
                   icon: const Icon(Icons.star_border, size: 28),
                   onPressed: () => _showRatingDialog(recipe),
                 ),
-
                 // 3-dot menu with Share
                 PopupMenuButton<String>(
                   onSelected: (value) {
