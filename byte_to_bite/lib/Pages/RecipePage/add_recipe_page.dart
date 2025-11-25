@@ -1,8 +1,11 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AddRecipePage extends StatefulWidget {
   const AddRecipePage({super.key});
@@ -116,6 +119,35 @@ class _AddRecipePageState extends State<AddRecipePage> {
       
       final firstName = userDoc.data()?['firstName'] ?? 'Anonymous';
 
+      // Save image locally if selected
+      String? localImagePath;
+      if (_selectedImage != null) {
+        try {
+          if (kIsWeb) {
+            // On web, use the blob URL directly
+            localImagePath = _selectedImage!.path;
+          } else {
+            // On mobile/desktop, save to app directory
+            final directory = await getApplicationDocumentsDirectory();
+            
+            // Create a unique filename using timestamp and user ID
+            final String fileName = 'recipe_${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+            final String filePath = '${directory.path}/$fileName';
+
+            // Copy the selected image to the app's directory
+            final File localImage = await _selectedImage!.copy(filePath);
+            localImagePath = localImage.path;
+
+            // Save the file path to shared preferences with recipe name as key
+            final prefs = await SharedPreferences.getInstance();
+            final recipeKey = 'recipe_image_${user.uid}_${_nameController.text.trim()}';
+            await prefs.setString(recipeKey, localImagePath);
+          }
+        } catch (e) {
+          print('Error saving image locally: $e');
+        }
+      }
+
       // Create recipe document in user's subcollection
       await FirebaseFirestore.instance
           .collection('users')
@@ -123,7 +155,7 @@ class _AddRecipePageState extends State<AddRecipePage> {
           .collection('recipes')
           .add({
         'name': _nameController.text.trim(),
-        'imageUrl': 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800',
+        'imageUrl': localImagePath ?? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800',
         'hashtags': hashtags,
         'ingredients': ingredients,
         'author': firstName,
@@ -219,10 +251,15 @@ class _AddRecipePageState extends State<AddRecipePage> {
                   child: _selectedImage != null
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
-                            _selectedImage!,
-                            fit: BoxFit.cover,
-                          ),
+                          child: kIsWeb
+                              ? Image.network(
+                                  _selectedImage!.path,
+                                  fit: BoxFit.cover,
+                                )
+                              : Image.file(
+                                  _selectedImage!,
+                                  fit: BoxFit.cover,
+                                ),
                         )
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
