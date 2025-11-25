@@ -180,28 +180,35 @@ Future<void> deleteMeal({
   }
 
   Stream<Map<String, dynamic>> streamGroceriesDoc(String uid, DateTime weekStart) {
-    return _db.collection('groceries').doc(groceriesDocId(uid, weekStart)).snapshots().map((doc) {
-      if (!doc.exists) {
+  final weekKey = isoWeek(weekStart); // or weekStart.toIso8601String()
+  return _db
+      .collection('groceries')
+      .where('userId', isEqualTo: uid)
+      .where('weekStart', isEqualTo: weekKey)
+      .snapshots()
+      .map((snapshot) {
+        if (snapshot.docs.isEmpty) {
+          return {
+            'items': <String>[],
+            'checked': <String, bool>{},
+            'userId': uid,
+            'weekStart': weekKey,
+            'listName': null,
+            'isManual': false,
+          };
+        }
+        final data = snapshot.docs.first.data() as Map<String, dynamic>;
         return {
-          'items': <String>[],
-          'checked': <String, bool>{},
-          'userId': uid,
-          'weekStart': isoWeek(weekStart),
-          'listName': null,
-          'isManual': false,
+          'items': List<String>.from(data['items'] ?? const []),
+          'checked': Map<String, bool>.from(data['checked'] ?? const {}),
+          'userId': data['userId'] ?? uid,
+          'weekStart': data['weekStart'] ?? weekKey,
+          'isManual': data['isManual'] ?? false,
+          'listName': data['listName'] as String?,
         };
-      }
-      final data = doc.data()!;
-      return {
-        'items': List<String>.from(data['items'] ?? const []),
-        'checked': Map<String, bool>.from(data['checked'] ?? const {}),
-        'userId': data['userId'] ?? uid,
-        'weekStart': data['weekStart'] ?? isoWeek(weekStart),
-        'isManual': data['isManual'] ?? false, 
-        'listName': data['listName'] as String?, 
-      };
-    });
-  }
+      });
+}
+
 
   Future<void> toggleGroceryChecked({
     required String uid,
@@ -1342,5 +1349,18 @@ Future<void> seedExampleRecipes() async {
         .collection('recipes')
         .doc(docId)
         .set(recipe, SetOptions(merge: true));
+  }
+}
+
+Future<void> backfillUserId() async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return;
+
+  final snapshot = await FirebaseFirestore.instance.collection('groceries').get();
+  for (final doc in snapshot.docs) {
+    final data = doc.data();
+    if (!data.containsKey('userId')) {
+      await doc.reference.set({'userId': uid}, SetOptions(merge: true));
+    }
   }
 }
