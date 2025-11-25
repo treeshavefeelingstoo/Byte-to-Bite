@@ -1,8 +1,9 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:byte_to_bite/pages/Jcode/jaislen.dart';
 
 class HomePage extends StatefulWidget {
-  final Map<DateTime, List<Meal>>? mealPlan;   // <-- nullable
+  final Map<DateTime, List<Meal>>? mealPlan;   
   final void Function(DateTime weekStart, Set<String> items)? onWeekGroceriesChanged;
   final Set<String> Function(DateTime weekStart)? getWeekGroceries;
   final Set<String>? excludedIngredients;
@@ -76,10 +77,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _addSelectedMealsToCalendar() {
-    if (widget.mealPlan == null || widget.onWeekGroceriesChanged == null || widget.getWeekGroceries == null) {
+  void _addSelectedMealsToCalendar() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Calendar not available')),
+        const SnackBar(content: Text('Please sign in')),
       );
       return;
     }
@@ -91,39 +93,31 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    // Get the start of the current week (Sunday)
+    final repo = MealPlanRepo();
     final now = DateTime.now();
-    final currentWeekStart = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: now.weekday % 7));
+    final currentWeekStart = weekStartOf(now);
 
-    // Add selected meals to the calendar
-    final allIngredients = <String>{};
-    int dayOffset = 1; // Start from Monday
-    
+    int dayOffset = 1; // start from Monday
     for (int index in _selectedMealIndices.toList()..sort()) {
       if (index < _generatedMeals.length) {
         final meal = _generatedMeals[index];
         final date = currentWeekStart.add(Duration(days: dayOffset));
-        
-        widget.mealPlan!.putIfAbsent(date, () => []).add(meal);
-        allIngredients.addAll(meal.ingredients);
+
+        // 🔥 Persist to Firestore
+        await repo.addMeal(date: date, meal: meal, mealType: meal.mealType);
+        await repo.addGroceries(date: date, ingredients: meal.ingredients);
+
         dayOffset++;
       }
     }
 
-    // Update groceries for the week
-    final currentGroceries = widget.getWeekGroceries!(currentWeekStart);
-    final updated = <String>{...currentGroceries, ...allIngredients};
-    widget.onWeekGroceriesChanged!(currentWeekStart, updated);
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Added ${_selectedMealIndices.length} meal(s) to calendar!'),
+        content: Text('Added ${_selectedMealIndices.length} meal(s) to calendar & groceries'),
         backgroundColor: Colors.green,
       ),
     );
 
-    // Clear selections after adding
     setState(() {
       _selectedMealIndices.clear();
       _generatedMeals.clear();

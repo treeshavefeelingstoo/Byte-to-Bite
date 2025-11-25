@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:byte_to_bite/Pages/RecipePage/recipe_page.dart';
 
 class Meal {
   final String name;
@@ -79,8 +80,11 @@ class MealPlanRepo {
         final data = doc.data();
         final days = (data['days'] as Map<String, dynamic>? ?? {});
         days.forEach((dateStr, mealsList) {
-          final date = DateTime.parse(dateStr); 
-          final normalized = normalizeDate(date); 
+          //print("Firestore day key: $dateStr → meals count ${(mealsList as List).length}");
+
+          //  Parse the ISO string back into a DateTime
+          final date = DateTime.parse(dateStr); // "2025-11-22T00:00:00.000"
+          final normalized = normalizeDate(date); // ensures midnight
           final meals = (mealsList as List<dynamic>)
               .map((e) => Meal.fromMap(Map<String, dynamic>.from(e)))
               .toList();
@@ -92,45 +96,54 @@ class MealPlanRepo {
   }
 
   Future<void> addMeal({
-    required DateTime date,
-    required Meal meal,
-    required String mealType,
-  }) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      throw Exception("User not signed in");
-    }
+  required DateTime date,
+  required Meal meal,
+  required String mealType,
+}) async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) throw Exception("User not signed in");
 
-    final dayKey = normalizeDate(date).toIso8601String(); 
-    final weekStart = weekStartOf(date);
+  final dayKey = normalizeDate(date).toIso8601String();
 
-    final docRef = FirebaseFirestore.instance
-        .collection('mealPlans')
-        .doc(mealPlanDocId(uid, weekStart));
+  final docRef = _db.collection('mealPlans').doc(dayKey);
 
-    await docRef.set({
-      'userId': uid,
-      'weekStart': isoWeek(weekStart),
-      'days': {
-        dayKey: FieldValue.arrayUnion([
-          {...meal.toMap(), 'mealType': mealType},
-        ]),
-      },
-    }, SetOptions(merge: true));
-  }
+  await docRef.set({
+    'userId': uid,
+    'days': {
+      dayKey: FieldValue.arrayUnion([
+        {...meal.toMap(), 'mealType': mealType},
+      ]),
+    },
+  }, SetOptions(merge: true));
+}
 
-  Future<void> deleteMeal({
-    required String uid,
-    required DateTime date,
-    required Meal meal,
-  }) async {
-    final dayKey = isoDate(date);
-    final docRef = _db.collection('mealPlans').doc(mealPlanDocId(uid, date));
-    final mealMap = meal.toMap();
-    await docRef.set({
-      'days.$dayKey': FieldValue.arrayRemove([mealMap]),
-    }, SetOptions(merge: true));
-  }
+Future<void> deleteMeal({
+  required String uid,
+  required DateTime date,
+  required Meal meal,
+}) async {
+  final dayKey = normalizeDate(date).toIso8601String();
+  final docRef = _db.collection('mealPlans').doc(dayKey);
+
+  final snapshot = await docRef.get();
+  final data = snapshot.data();
+  if (data == null || data['days'] == null || data['days'][dayKey] == null) return;
+
+  final meals = List<Map<String, dynamic>>.from(data['days'][dayKey]);
+
+  // Remove the meal by matching key fields
+  final updatedMeals = meals.where((m) {
+    return !(m['name'] == meal.name &&
+             m['mealType'].toString().toLowerCase() == meal.mealType.toLowerCase() &&
+             List<String>.from(m['ingredients']).join(',') == meal.ingredients.join(','));
+  }).toList();
+
+  await docRef.set({
+    'days': {
+      dayKey: updatedMeals,
+    },
+  }, SetOptions(merge: true));
+}
 
   Future<void> addGroceries({
     required DateTime date,
@@ -832,6 +845,24 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
     await repo.deleteMeal(uid: user.uid, date: date, meal: meal);
   }
 
+  void _showMealIngredientSubstitution(Meal meal, DateTime date, Map<DateTime, List<Meal>> mealPlan) {
+    // Convert Meal to Recipe for the substitution page
+    final recipe = Recipe(
+      name: meal.name,
+      imageUrl: '', // Meals don't have images
+      hashtags: meal.restrictions.map((r) => '#$r').toList(),
+      ingredients: meal.ingredients,
+      author: 'Meal Prep',
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => IngredientSubstitutionPage(recipe: recipe),
+      ),
+    );
+  }
+
   void _showMeals(DateTime date, Map<DateTime, List<Meal>> mealPlan) {
     final meals = mealPlan[normalizeDate(date)] ?? [];
 
@@ -853,16 +884,36 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
                         leading: Icon(meal.icon, color: meal.color),
                         title: Text("${meal.mealType.toUpperCase()} • ${meal.name}"),
                         subtitle: Text("Ingredients: ${meal.ingredients.join(", ")}"),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
-                            await _deleteMeal(date, meal);
-                            if (mounted) {
-                              Navigator.pop(context);
-                              _showMeals(date, mealPlan);
-                            }
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Color(0xFF479E36)),
+                              tooltip: 'Modify Ingredients',
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _showMealIngredientSubstitution(meal, date, mealPlan);
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () async {
+                                await _deleteMeal(date, meal);
+                                Navigator.pop(context);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text("Deleted '${meal.name}'")),
+                                  );
+                                }
+
+                              },
+                            ),
+                          ],
                         ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showMealIngredientSubstitution(meal, date, mealPlan);
+                        },
                       ),
                     );
                   },
@@ -900,6 +951,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
         final day = index - offset + 1;
         final date = DateTime(_currentMonth.year, _currentMonth.month, day);
         final meals = mealPlan[normalizeDate(date)] ?? [];
+        //print("Looking up ${normalizeDate(date)} → found ${meals.length} meals");
+
 
         return GestureDetector(
           onTap: () => _showMeals(date, mealPlan),
@@ -958,6 +1011,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
       children: List.generate(7, (i) {
         final date = week.add(Duration(days: i));
         final meals = mealPlan[normalizeDate(date)] ?? [];
+        //print("Week cell ${normalizeDate(date)} → ${meals.length} meals");
+
 
         return Expanded(
           child: GestureDetector(
@@ -1116,6 +1171,8 @@ class _MealPlannerPageState extends State<MealPlannerPage> {
             return const Center(child: CircularProgressIndicator());
           }
           final mealPlan = snapshot.data!;
+          //print("MealPlan keys: ${mealPlan.keys}"); //debug
+
 
           return Center(
             child: Container(
